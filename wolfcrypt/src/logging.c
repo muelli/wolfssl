@@ -115,7 +115,7 @@ static WC_INLINE double current_time(int reset)
 
 /* Set these to default values initially. */
 static wolfSSL_Logging_cb log_function = NULL;
-static int loggingEnabled = 0;
+static int loggingEnabled = 1;
 
 #if defined(WOLFSSL_APACHE_MYNEWT)
 #include "log/log.h"
