@@ -20519,6 +20519,8 @@ exit_scv:
 #ifdef HAVE_SESSION_TICKET
 int SetTicket(WOLFSSL* ssl, const byte* ticket, word32 length)
 {
+    WOLFSSL_MSG("Entering SetTicket");
+    fprintf (stderr, " for %d bytes\n", length);
     /* Free old dynamic ticket if we already had one */
     if (ssl->session.isDynamic) {
         XFREE(ssl->session.ticket, ssl->heap, DYNAMIC_TYPE_SESSION_TICK);
@@ -23870,7 +23872,13 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
         /* build external */
         XMEMCPY(et->enc_ticket, &it, sizeof(InternalTicket));
 
-        /* encrypt */
+                /* build external - but that's encrypted under the server's key.
+                 * Does it still get encrypted with the master key or something?
+                 */
+
+
+
+        /* encrypt - but I assume for us, the server rather than for the client. That is, only we, the server, can read this back again. */
         encLen = WOLFSSL_TICKET_ENC_SZ;  /* max size user can use */
         ret = ssl->ctx->ticketEncCb(ssl, et->key_name, et->iv, et->mac, 1,
                                     et->enc_ticket, sizeof(InternalTicket),
@@ -23880,6 +23888,13 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
                 encLen > WOLFSSL_TICKET_ENC_SZ) {
                 WOLFSSL_MSG("Bad user ticket encrypt size");
                 return BAD_TICKET_KEY_CB_SZ;
+            }
+
+            {
+                fprintf (stderr, "ticket encryption success of size %d: ", encLen);
+                for (size_t i=0; i< (unsigned)encLen; i++) {
+                    fprintf(stderr, "%02ld: %02X\n", i, et->enc_ticket[i]);
+                }
             }
 
             /* sanity checks on encrypt callback */
@@ -23910,14 +23925,27 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
                 return BAD_TICKET_ENCRYPT;
             }
 
+
+
+
             /* set size */
             c16toa((word16)encLen, et->enc_len);
             ssl->session.ticketLen = (word16)(encLen + WOLFSSL_TICKET_FIXED_SZ);
             if (encLen < WOLFSSL_TICKET_ENC_SZ) {
+                fprintf (stderr, "memmoving the shit up\n");
                 /* move mac up since whole enc buffer not used */
+                // Does this assume that that the mac starts right after the enc_ticket?
                 XMEMMOVE(et->enc_ticket +encLen, et->mac,WOLFSSL_TICKET_MAC_SZ);
             }
         }
+
+        {
+            fprintf (stderr, "finished creating session ticket\n");
+            for (size_t i = 0;  i < ssl->session.ticketLen; i++) {
+                fprintf (stderr, "%02ld: %02X\n", i, ssl->session.ticket[i]);
+            }
+        }
+
 
         return ret;
     }
@@ -23943,8 +23971,16 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
         et = (ExternalTicket*)input;
         it = (InternalTicket*)et->enc_ticket;
 
+
         /* decrypt */
         ato16(et->enc_len, &inLen);
+        inLen  -= 16;
+        {
+            fprintf (stderr, "this is the cookie\n");
+            for (size_t i=0; i<16; i++) {
+                fprintf (stderr, "%02ld: %02X\n", i, et->enc_ticket[i]);
+            }
+        }
         if (inLen > (word16)(len - WOLFSSL_TICKET_FIXED_SZ)) {
             return BAD_TICKET_MSG_SZ;
         }
@@ -24001,6 +24037,14 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
                                                            sizeof(TicketNonce));
     #endif
                 ssl->session.namedGroup = it->namedGroup;
+
+                WOLFSSL_MSG("Retrieved Ticket!!1");
+                /* This is not interesting for us, though, I think. */
+                /* Here, we are the server and we have received a ticket. */
+                for (size_t i = 0; i < 16; i++) {
+                    //fprintf(stderr, "%02ld: %c\n", i, et->tfoCookie[i]);
+                }
+
 #endif
             }
         }

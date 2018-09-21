@@ -2232,7 +2232,7 @@ static int CreateCookie(WOLFSSL* ssl, byte* hash, byte hashSz)
 }
 #endif
 
-/* Restart the Hanshake hash with a hash of the previous messages.
+/* Restart the Handshake hash with a hash of the previous messages.
  *
  * ssl The SSL/TLS object.
  * returns 0 on success, otherwise failure.
@@ -6332,6 +6332,7 @@ static int DoTls13EndOfEarlyData(WOLFSSL* ssl, const byte* input,
 #ifndef NO_WOLFSSL_CLIENT
 /* Handle a New Session Ticket handshake message.
  * Message contains the information required to perform resumption.
+ * Used by the client-side.
  *
  * ssl       The SSL/TLS object.
  * input     The message buffer.
@@ -6395,6 +6396,13 @@ static int DoTls13NewSessionTicket(WOLFSSL* ssl, const byte* input,
     *inOutIdx += LENGTH_SZ;
     if ((*inOutIdx - begin) + length > size)
         return BUFFER_ERROR;
+
+    {
+        fprintf (stderr, "Client has this cookie of size %d:\n", length);
+        for (size_t i=0; i<length; i++) {
+            fprintf (stderr, "%02ld: %02X\n", i, (input + *inOutIdx)[i]);
+        }
+    }
 
     if ((ret = SetTicket(ssl, input + *inOutIdx, length)) != 0)
         return ret;
