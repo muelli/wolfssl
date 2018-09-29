@@ -23985,8 +23985,11 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
             return BAD_TICKET_MSG_SZ;
         }
         outLen = inLen;   /* may be reduced by user padding */
-        ret = ssl->ctx->ticketEncCb(ssl, et->key_name, et->iv,
-                                    et->enc_ticket + inLen, 0,
+        ret = ssl->ctx->ticketEncCb(ssl, et->key_name,
+                                    et->iv,
+                                    /* mac */ // et->enc_ticket + inLen,
+                                    et->mac,
+                                    /*enc=1; dec=0*/ 0,
                                     et->enc_ticket, inLen, &outLen,
                                     ssl->ctx->ticketEncCtx);
         if (ret == WOLFSSL_TICKET_RET_FATAL || ret < 0) return ret;
