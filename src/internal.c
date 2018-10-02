@@ -22518,12 +22518,15 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
             int ret = TLSX_KeyShare_Establish(ssl);
             if (ret == KEY_SHARE_ERROR)
                 ssl->options.serverState = SERVER_HELLO_RETRY_REQUEST_COMPLETE;
-            else if (ret != 0)
+            else if (ret != 0) {
+                fprintf (stderr, "TLSX_KeyShare_Establish: %d\n", ret);
                 return 0;
+            }
         }
         else if (first == TLS13_BYTE) {
             /* Can't negotiate TLS 1.3 ciphersuites with lower protocol
              * version. */
+            WOLFSSL_MSG("TLS13_BYTE");
             return 0;
         }
 #endif
