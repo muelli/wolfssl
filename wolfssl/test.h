@@ -827,6 +827,15 @@ static WC_INLINE void tcp_connect(SOCKET_T* sockfd, const char* ip, word16 port,
     tcp_socket(sockfd, udp, sctp);
 
     if (!udp) {
+        {
+            int opt = 1;
+            int res;
+            res = setsockopt(*sockfd, SOL_TCP, TCP_FASTOPEN_CONNECT, &opt, sizeof (opt));
+            if (res < 0) {
+                err_sys("setsockopt TCP_FASTOPEN\n");
+            }
+        }
+
         if (connect(*sockfd, (const struct sockaddr*)&addr, sizeof(addr)) != 0)
             err_sys("tcp connect failed");
     }
@@ -908,8 +917,17 @@ static WC_INLINE void tcp_listen(SOCKET_T* sockfd, word16* port, int useAnyAddr,
         res = setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, &on, len);
         if (res < 0)
             err_sys("setsockopt SO_REUSEADDR failed\n");
+
     }
 #endif
+    {
+        int opt = 5;
+        int res;
+        res = setsockopt(*sockfd, SOL_TCP, TCP_FASTOPEN, &opt, sizeof (opt));
+        if (res < 0)
+            err_sys("setsockopt TCPFO failed\n");
+
+    }
 
     if (bind(*sockfd, (const struct sockaddr*)&addr, sizeof(addr)) != 0)
         err_sys("tcp bind failed");
