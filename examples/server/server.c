@@ -1242,6 +1242,7 @@ THREAD_RETURN WOLFSSL_THREAD server_test(void* args)
                 socklen_t client_len = sizeof(client);
                 clientfd = accept(sockfd, (struct sockaddr*)&client,
                                  (ACCEPT_THIRD_T)&client_len);
+                WOLFSSL_MSG ("\n---\nNew Connection resume!!1");
             }
             else {
                 tcp_listen(&sockfd, &port, useAnyAddr, dtlsUDP, dtlsSCTP);
@@ -1415,6 +1416,7 @@ THREAD_RETURN WOLFSSL_THREAD server_test(void* args)
         tcp_accept(&sockfd, &clientfd, (func_args*)args, port, useAnyAddr,
                        dtlsUDP, dtlsSCTP, serverReadyFile ? 1 : 0, doListen);
         doListen = 0; /* Don't listen next time */
+        WOLFSSL_MSG ("\n---\nNew Connection!!1");
 
         if (SSL_set_fd(ssl, clientfd) != WOLFSSL_SUCCESS) {
             err_sys_ex(runWithErrors, "error in setting fd");
