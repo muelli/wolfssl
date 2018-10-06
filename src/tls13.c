@@ -6397,6 +6397,14 @@ static int DoTls13NewSessionTicket(WOLFSSL* ssl, const byte* input,
     if ((*inOutIdx - begin) + length > size)
         return BUFFER_ERROR;
 
+    const byte* ticket_begin = input + *inOutIdx;
+    {
+        fprintf (stderr, "Client sees this session ticket of length: %d:\n", length);
+        for (size_t i=0; i < length; i++) {
+            fprintf (stderr, "%02ld: %02X\n", i, ticket_begin[i]);
+        }
+    }
+
     {
         fprintf (stderr, "Client has this cookie of size %d:\n", length);
         for (size_t i=0; i<length; i++) {
