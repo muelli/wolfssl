@@ -3390,7 +3390,10 @@ static int DoPreSharedKeys(WOLFSSL* ssl, const byte* input, word32 helloSz,
             if (ret != 0)
                 return ret;
         }
-        else
+        else {
+            WOLFSSL_MSG ("resumption failed");
+            return -1;
+            }
     #endif
     #ifndef NO_PSK
         if ((ssl->options.server_psk_tls13_cb != NULL &&
