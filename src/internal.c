@@ -23942,6 +23942,9 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
                 // Does this assume that that the mac starts right after the enc_ticket?
                 XMEMMOVE(et->enc_ticket +encLen, et->mac,WOLFSSL_TICKET_MAC_SZ);
             }
+
+            ssl->session.ticket[ssl->session.ticketLen] = 'A';
+            ssl->session.ticketLen++;
         }
 
         {
