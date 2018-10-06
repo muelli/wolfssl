@@ -20520,7 +20520,12 @@ exit_scv:
 int SetTicket(WOLFSSL* ssl, const byte* ticket, word32 length)
 {
     WOLFSSL_MSG("Entering SetTicket");
-    fprintf (stderr, " for %d bytes\n", length);
+    {
+        fprintf (stderr, " for %d bytes\n", length);
+        for (size_t i = 0; i < length; i++) {
+            fprintf (stderr, "%02ld: %02X\n", i, ticket[i]);
+        }
+    }
     /* Free old dynamic ticket if we already had one */
     if (ssl->session.isDynamic) {
         XFREE(ssl->session.ticket, ssl->heap, DYNAMIC_TYPE_SESSION_TICK);
