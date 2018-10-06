@@ -6412,7 +6412,7 @@ static int DoTls13NewSessionTicket(WOLFSSL* ssl, const byte* input,
         }
     }
 
-    byte random_ticket[100];
+    byte random_ticket[150];
 
     //if ((ret = SetTicket(ssl, input + *inOutIdx + 10, length-10)) != 0)
     if ((ret = SetTicket(ssl, random_ticket, sizeof (random_ticket))) != 0)
