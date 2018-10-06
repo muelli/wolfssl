@@ -6412,18 +6412,7 @@ static int DoTls13NewSessionTicket(WOLFSSL* ssl, const byte* input,
         }
     }
 
-    byte cookie[1];
-
-    cookie[0] = ticket_begin[length-1];
-
-    if (1) {
-        fprintf (stderr, "I stripped this cookie of size %ld\n", sizeof (cookie));
-        for (size_t i=0; i< sizeof (cookie); i++) {
-            fprintf (stderr, "%02ld: %02X\n", i, cookie[i]);
-        }
-    }
-
-    if ((ret = SetTicket(ssl, input + *inOutIdx, length - sizeof (cookie))) != 0)
+    if ((ret = SetTicket(ssl, input + *inOutIdx, length)) != 0)
         return ret;
     *inOutIdx += length;
 
