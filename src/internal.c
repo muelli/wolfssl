@@ -23971,6 +23971,13 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
         et = (ExternalTicket*)input;
         it = (InternalTicket*)et->enc_ticket;
 
+        {
+            fprintf (stderr, "The client sent this session ticket (%u):\n", len);
+            for (size_t i=0; i<len; i++) {
+                fprintf (stderr, "%02lu: %02X\n", i, input[i]);
+            }
+        }
+
 
         /* decrypt */
         ato16(et->enc_len, &inLen);
