@@ -24005,7 +24005,10 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
                                     /*enc=1; dec=0*/ 0,
                                     et->enc_ticket, inLen, &outLen,
                                     ssl->ctx->ticketEncCtx);
-        if (ret == WOLFSSL_TICKET_RET_FATAL || ret < 0) return ret;
+        if (ret == WOLFSSL_TICKET_RET_FATAL || ret < 0) {
+            WOLFSSL_MSG("Bad user ticket decrypt ret");
+            return ret;
+        }
         if (outLen > inLen || outLen < (int)sizeof(InternalTicket)) {
             WOLFSSL_MSG("Bad user ticket decrypt len");
             return BAD_TICKET_KEY_CB_SZ;
