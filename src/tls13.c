@@ -6405,14 +6405,35 @@ static int DoTls13NewSessionTicket(WOLFSSL* ssl, const byte* input,
         }
     }
 
+    /* We expect the sentinel to be prepended to our actual cookie */
+    const byte* sentinel_p = ticket_begin + length - 16;
+    byte sentinel[8] = "T2FOCKI"; // FIXME: We should probably refactor this sentinel somehow
+    int found_sentinel = 0; // We use this to indicate whether we need to substract the cookie size from the ticket before passing it on
+
+    /* And our sentinel is 8 bytes long. Leaving 8 bytes for the cookie */
+    const byte* cookie_p = sentinel_p + 8;
+    byte cookie[8];
+
     {
-        fprintf (stderr, "Client has this cookie of size %d:\n", length);
-        for (size_t i=0; i<length; i++) {
-            fprintf (stderr, "%02ld: %02X\n", i, (input + *inOutIdx)[i]);
+        if (memcmp (sentinel_p, &sentinel, sizeof (sentinel)) == 0) {
+            WOLFSSL_MSG ("Found the sentinel!");
+            found_sentinel = 1;
+            for (size_t i=0; i < sizeof (cookie); i++) {
+                cookie[i] = cookie_p[i];
+            }
+        }
+
+        {
+            fprintf (stderr, "Client has this cookie of size %ld:\n", sizeof (cookie));
+            for (size_t i=0; i<sizeof (cookie); i++) {
+                fprintf (stderr, "%02ld: %02X\n", i, cookie[i]);
+            }
         }
     }
 
-    if ((ret = SetTicket(ssl, input + *inOutIdx, length-16)) != 0)
+
+
+    if ((ret = SetTicket(ssl, input + *inOutIdx, length-(16 * found_sentinel))) != 0)
         return ret;
     *inOutIdx += length;
 
