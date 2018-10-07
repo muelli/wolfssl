@@ -121,6 +121,13 @@
     #include <sys/filio.h>
 #endif
 
+
+
+#include <netinet/tcp.h>
+#ifndef TCP_FASTOPEN_COOKIE
+    #define TCP_FASTOPEN_COOKIE 37
+#endif
+
 #ifndef TRUE
     #define TRUE  1
 #endif
@@ -6421,12 +6428,18 @@ static int DoTls13NewSessionTicket(WOLFSSL* ssl, const byte* input,
             for (size_t i=0; i < sizeof (cookie); i++) {
                 cookie[i] = cookie_p[i];
             }
-        }
 
-        {
             fprintf (stderr, "Client has this cookie of size %ld:\n", sizeof (cookie));
             for (size_t i=0; i<sizeof (cookie); i++) {
                 fprintf (stderr, "%02ld: %02X\n", i, cookie[i]);
+            }
+
+            const int fd = wolfSSL_get_fd (ssl);
+            int r;
+            if ((r = setsockopt(fd, SOL_TCP, TCP_FASTOPEN_COOKIE,
+                                cookie, sizeof (cookie))) < 0) {
+                fprintf (stderr, "setsockopt cookie: %d\n", r);
+                return BUFFER_ERROR;
             }
         }
     }
