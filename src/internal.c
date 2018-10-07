@@ -51,6 +51,16 @@
     #include "libntruencrypt/ntru_crypto.h"
 #endif
 
+
+
+
+#include <netinet/tcp.h>
+#ifndef TCP_FASTOPEN_COOKIE
+    #define TCP_FASTOPEN_COOKIE 37
+    #define TCP_FASTOPEN_COOKIE_GEN 39
+#endif
+
+
 #if defined(DEBUG_WOLFSSL) || defined(SHOW_SECRETS) || \
     defined(CHACHA_AEAD_TEST) || defined(WOLFSSL_SESSION_EXPORT_DEBUG)
     #if defined(FREESCALE_MQX) || defined(FREESCALE_KSDK_MQX)
@@ -23947,20 +23957,93 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
 
         const int add_tlsfo_cookie = 1;
         if (add_tlsfo_cookie) {
-            {
+            { /* Begin set sentinel s.t. we can detect the presence of a TLSFO cookie on the client */
                 const byte sentinel[8] = "T2FOCKI";
                 for (size_t i=0; i < sizeof (sentinel); i++) {
                     ssl->session.ticket[ssl->session.ticketLen] = sentinel[i];
                     ssl->session.ticketLen++;
                 }
-            }
-            {
-                const byte cookie[8] = "T2FOCKI";
-                for (size_t i=0; i < sizeof (cookie); i++) {
+            } /* End sentinel */
+
+            { /* Here we generate the cookie and append it to the ticket */
+                const int fd = wolfSSL_get_fd (ssl);
+                int r;
+                struct tpmbuf {
+                    struct sockaddr peeraddr; // how wide is that sockaddr? O_o
+                    struct sockaddr ownaddr;
+                    struct sockaddr unusedaddr1;
+                    struct sockaddr unusedaddr2;
+                } tmpbuf = {0};
+                socklen_t peeraddr_len = sizeof (tmpbuf.peeraddr);
+                socklen_t sockname_len = sizeof (tmpbuf.ownaddr);
+
+
+                if ((r = getpeername (fd, &tmpbuf.peeraddr, &peeraddr_len)) < 0) {
+                    fprintf (stderr, "getpeername: %d\n", r);
+                    return BAD_TICKET_ENCRYPT;
+                }
+
+                if ((r = getsockname (fd, &tmpbuf.ownaddr, &sockname_len)) < 0) {
+                    fprintf (stderr, "getsockname: %d\n", r);
+                    return BAD_TICKET_ENCRYPT;
+                }
+
+                const int debug_ips = TRUE;
+                if (debug_ips == TRUE) {
+                    char ipstr[256];
+                    const struct sockaddr_in *pa = (struct sockaddr_in*) &tmpbuf.peeraddr;
+                    inet_ntop(AF_INET, &pa->sin_addr, ipstr, sizeof(ipstr));
+                    fprintf (stderr, "peeraddr: %s\n", ipstr);
+
+                    const struct sockaddr_in *sa = (struct sockaddr_in*) &tmpbuf.ownaddr;
+                    inet_ntop(AF_INET, &sa->sin_addr, ipstr, sizeof(ipstr));
+                    fprintf (stderr, "sockaddr: %s\n", ipstr);
+                }
+
+                /* The COOKIE_GEN kernel API wants 16 byte */
+                char data_to_be_signed[4*4]; /* __be32[4] */
+                struct sockaddr_in*  peeraddr  = (struct sockaddr_in*) &tmpbuf.peeraddr;
+                struct sockaddr_in*  ownaddr  = (struct sockaddr_in*) &tmpbuf.ownaddr;
+                /* In net/ipv4/tcp_fastopen.c:tcp_fastopen_cookie_gen the cookie is made of {saddr, daddr, 0, 0} */
+                memcpy (data_to_be_signed, &peeraddr->sin_addr, 4 /* hrm. I am assuming 4 bytes here. Is a sockaddr 4 bytes wide? */);
+                memcpy (data_to_be_signed+4, &ownaddr->sin_addr, 4 /* hrm. I am assuming 4 bytes here. Is a sockaddr 4 bytes wide? */);
+                bzero (data_to_be_signed+4+4, 4);
+                bzero (data_to_be_signed+4+4+4, 4);
+                /* Now we've finished making the data suitable for the kernel */
+
+                if (FALSE) {
+                    char sanity_check[sizeof (data_to_be_signed)];
+                    memcpy (sanity_check, data_to_be_signed, sizeof(data_to_be_signed));
+                }
+
+                byte cookie[8] = "T2FOCKI";
+                socklen_t size_len = sizeof (data_to_be_signed);
+                if ((r = getsockopt (fd, SOL_TCP, TCP_FASTOPEN_COOKIE_GEN,
+                                     &data_to_be_signed, &size_len)) < 0) {
+                    fprintf (stderr, "setsockopt TCP_FASTOPEN_COOKIE_GEN: %d\n", r);
+                    return BAD_TICKET_ENCRYPT;
+                } else {
+                    fprintf (stderr, "Generated cookie of size: %d\n", r);
+                    /* Hm. Can we convince the compiler that r >= 0 without a forceful cast?*/
+                    const size_t r_n0 = (size_t) r;
+                    if (r_n0 > sizeof (cookie)) {
+                        fprintf (stderr, "Cookie too big: %d > %ld\n", r, sizeof (cookie));
+                        return BAD_TICKET_ENCRYPT;
+                    } else {
+                        for (size_t i=0; i<r_n0; i++) {
+                            fprintf (stderr, "%02X", data_to_be_signed[i]);
+                            cookie[i] = data_to_be_signed[i];
+                        }
+                    }
+                }
+
+
+                /* This is the actual appending of the cookie to the ticket */
+                for (size_t i=0; i < sizeof (cookie) /* FIXME: We should probably use r rather than sizeof */; i++) {
                     ssl->session.ticket[ssl->session.ticketLen] = cookie[i];
                     ssl->session.ticketLen++;
                 }
-            }
+            } /* end of cookie generation */
         }
 
         {
