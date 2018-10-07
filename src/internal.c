@@ -23944,18 +23944,22 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
             }
         }
 
-        {
-            const byte sentinel[8] = "T2FOCKI";
-            for (size_t i=0; i < sizeof (sentinel); i++) {
-                ssl->session.ticket[ssl->session.ticketLen] = sentinel[i];
-                ssl->session.ticketLen++;
+
+        const int add_tlsfo_cookie = 1;
+        if (add_tlsfo_cookie) {
+            {
+                const byte sentinel[8] = "T2FOCKI";
+                for (size_t i=0; i < sizeof (sentinel); i++) {
+                    ssl->session.ticket[ssl->session.ticketLen] = sentinel[i];
+                    ssl->session.ticketLen++;
+                }
             }
-        }
-        {
-            const byte cookie[8] = "T2FOCKI";
-            for (size_t i=0; i < sizeof (cookie); i++) {
-                ssl->session.ticket[ssl->session.ticketLen] = cookie[i];
-                ssl->session.ticketLen++;
+            {
+                const byte cookie[8] = "T2FOCKI";
+                for (size_t i=0; i < sizeof (cookie); i++) {
+                    ssl->session.ticket[ssl->session.ticketLen] = cookie[i];
+                    ssl->session.ticketLen++;
+                }
             }
         }
 
