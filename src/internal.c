@@ -23987,8 +23987,9 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
         outLen = inLen;   /* may be reduced by user padding */
         ret = ssl->ctx->ticketEncCb(ssl, et->key_name,
                                     et->iv,
-                                    /* mac */ // et->enc_ticket + inLen,
-                                    et->mac,
+                                    /* mac */
+                                    //et->mac does not work so well :-/
+                                    et->enc_ticket + inLen,
                                     /*enc=1; dec=0*/ 0,
                                     et->enc_ticket, inLen, &outLen,
                                     ssl->ctx->ticketEncCtx);
