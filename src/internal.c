@@ -23974,7 +23974,7 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
 
         /* decrypt */
         ato16(et->enc_len, &inLen);
-        inLen  -= 16;
+        //inLen  -= 16;
         {
             fprintf (stderr, "this is the cookie\n");
             for (size_t i=0; i<16; i++) {
