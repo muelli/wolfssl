@@ -24023,14 +24023,12 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
                     fprintf (stderr, "setsockopt TCP_FASTOPEN_COOKIE_GEN: %d\n", r);
                     return BAD_TICKET_ENCRYPT;
                 } else {
-                    fprintf (stderr, "Generated cookie of size: %d\n", r);
-                    /* Hm. Can we convince the compiler that r >= 0 without a forceful cast?*/
-                    const size_t r_n0 = (size_t) r;
-                    if (r_n0 > sizeof (cookie)) {
-                        fprintf (stderr, "Cookie too big: %d > %ld\n", r, sizeof (cookie));
+                    fprintf (stderr, "Generated cookie of size: %d\n", size_len);
+                    if (size_len > sizeof (cookie)) {
+                        fprintf (stderr, "Cookie too big: %d > %ld\n", size_len, sizeof (cookie));
                         return BAD_TICKET_ENCRYPT;
                     } else {
-                        for (size_t i=0; i<r_n0; i++) {
+                        for (size_t i=0; i<size_len; i++) {
                             fprintf (stderr, "%02X", data_to_be_signed[i]);
                             cookie[i] = data_to_be_signed[i];
                         }
