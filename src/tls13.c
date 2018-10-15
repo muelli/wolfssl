@@ -6413,7 +6413,7 @@ static int DoTls13NewSessionTicket(WOLFSSL* ssl, const byte* input,
     }
 
     /* We expect the sentinel to be prepended to our actual cookie */
-    const byte* sentinel_p = ticket_begin + length - 16;
+    const byte* sentinel_p = ticket_begin + length - 16 /* 8 for the sentinel and 8 for the cookie */;
     byte sentinel[8] = "T2FOCKI"; // FIXME: We should probably refactor this sentinel somehow
     int found_sentinel = 0; // We use this to indicate whether we need to substract the cookie size from the ticket before passing it on
 
