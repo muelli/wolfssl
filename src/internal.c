@@ -20530,7 +20530,8 @@ exit_scv:
 int SetTicket(WOLFSSL* ssl, const byte* ticket, word32 length)
 {
     WOLFSSL_MSG("Entering SetTicket");
-    {
+    const int TLSFO_DEBUG = 0;
+    if (TLSFO_DEBUG) {
         fprintf (stderr, " for %d bytes\n", length);
         for (size_t i = 0; i < length; i++) {
             fprintf (stderr, "%02ld: %02X\n", i, ticket[i]);
@@ -23905,7 +23906,8 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
                 return BAD_TICKET_KEY_CB_SZ;
             }
 
-            {
+            const int TLSFO_DEBUG = 0;
+            if (TLSFO_DEBUG) {
                 fprintf (stderr, "ticket encryption success of size %d: ", encLen);
                 for (size_t i=0; i< (unsigned)encLen; i++) {
                     fprintf(stderr, "%02ld: %02X\n", i, et->enc_ticket[i]);
@@ -23947,7 +23949,10 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
             c16toa((word16)encLen, et->enc_len);
             ssl->session.ticketLen = (word16)(encLen + WOLFSSL_TICKET_FIXED_SZ);
             if (encLen < WOLFSSL_TICKET_ENC_SZ) {
-                fprintf (stderr, "memmoving the shit up\n");
+                //const int TLSFO_DEBUG = 0;
+                if (TLSFO_DEBUG) {
+                    fprintf (stderr, "memmoving the shit up\n");
+                }
                 /* move mac up since whole enc buffer not used */
                 // Does this assume that that the mac starts right after the enc_ticket?
                 XMEMMOVE(et->enc_ticket +encLen, et->mac,WOLFSSL_TICKET_MAC_SZ);
@@ -24044,7 +24049,8 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
             } /* end of cookie generation */
         }
 
-        {
+        const int TLSFO_DEBUG = 0;
+        if (TLSFO_DEBUG) {
             fprintf (stderr, "finished creating session ticket\n");
             for (size_t i = 0;  i < ssl->session.ticketLen; i++) {
                 fprintf (stderr, "%02ld: %02X\n", i, ssl->session.ticket[i]);
@@ -24076,7 +24082,8 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
         et = (ExternalTicket*)input;
         it = (InternalTicket*)et->enc_ticket;
 
-        {
+        const int TLSFO_DEBUG = 0;
+        if (TLSFO_DEBUG) {
             fprintf (stderr, "The client sent this session ticket (%u):\n", len);
             for (size_t i=0; i<len; i++) {
                 fprintf (stderr, "%02lu: %02X\n", i, input[i]);
@@ -24087,7 +24094,8 @@ static int DoSessionTicket(WOLFSSL* ssl, const byte* input, word32* inOutIdx,
         /* decrypt */
         ato16(et->enc_len, &inLen);
         //inLen  -= 16;
-        {
+        //const int TLSFO_DEBUG = 0;
+        if (TLSFO_DEBUG) {
             fprintf (stderr, "this is the cookie\n");
             for (size_t i=0; i<16; i++) {
                 fprintf (stderr, "%02ld: %02X\n", i, et->enc_ticket[i]);
