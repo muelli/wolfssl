@@ -6405,7 +6405,8 @@ static int DoTls13NewSessionTicket(WOLFSSL* ssl, const byte* input,
         return BUFFER_ERROR;
 
     const byte* ticket_begin = input + *inOutIdx;
-    {
+    const int TLSFO_DEBUG = 0;
+    if (TLSFO_DEBUG) {
         fprintf (stderr, "Client sees this session ticket of length: %d:\n", length);
         for (size_t i=0; i < length; i++) {
             fprintf (stderr, "%02ld: %02X\n", i, ticket_begin[i]);
@@ -6429,9 +6430,12 @@ static int DoTls13NewSessionTicket(WOLFSSL* ssl, const byte* input,
                 cookie[i] = cookie_p[i];
             }
 
-            fprintf (stderr, "Client has this cookie of size %ld:\n", sizeof (cookie));
-            for (size_t i=0; i<sizeof (cookie); i++) {
-                fprintf (stderr, "%02ld: %02X\n", i, cookie[i]);
+            //const int TLSFO_DEBUG = 0;
+            if (TLSFO_DEBUG) {
+                fprintf (stderr, "Client has this cookie of size %ld:\n", sizeof (cookie));
+                for (size_t i=0; i<sizeof (cookie); i++) {
+                    fprintf (stderr, "%02ld: %02X\n", i, cookie[i]);
+                }
             }
 
             const int fd = wolfSSL_get_fd (ssl);
