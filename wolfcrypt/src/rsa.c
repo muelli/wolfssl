@@ -2118,7 +2118,7 @@ static int RsaPrivateDecryptEx(byte* in, word32 inLen, byte* out,
 
         key->state = RSA_STATE_DECRYPT_RES;
 
-        FALL_THROUGH;
+        //FALL_THROUGH;
     }
     case RSA_STATE_DECRYPT_RES:
     #if defined(WOLFSSL_ASYNC_CRYPT) && defined(WC_ASYNC_ENABLE_RSA) && \
