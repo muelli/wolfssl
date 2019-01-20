@@ -827,7 +827,7 @@ static WC_INLINE void tcp_connect(SOCKET_T* sockfd, const char* ip, word16 port,
     tcp_socket(sockfd, udp, sctp);
 
     if (!udp) {
-        const int ENABLE_FASTOPEN = 0;
+        const int ENABLE_FASTOPEN = 1;
         if (ENABLE_FASTOPEN) {
             int opt = 1;
             int res;
