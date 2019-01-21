@@ -299,7 +299,8 @@ static int ClientBenchmarkConnections(WOLFSSL_CTX* ctx, char* host, word16 port,
             }
         #endif
 
-            tcp_connect(&sockfd, host, port, dtlsUDP, dtlsSCTP, ssl);
+            const int fastopen_connect = benchResume;
+            tcp_connect(&sockfd, host, port, dtlsUDP, dtlsSCTP, ssl, fastopen_connect);
 
             if (wolfSSL_set_fd(ssl, sockfd) != WOLFSSL_SUCCESS) {
                 err_sys("error in setting fd");
@@ -377,7 +378,8 @@ static int ClientBenchmarkThroughput(WOLFSSL_CTX* ctx, char* host, word16 port,
     if (ssl == NULL)
         err_sys("unable to get SSL object");
 
-    tcp_connect(&sockfd, host, port, dtlsUDP, dtlsSCTP, ssl);
+    const int fastopen_connect = 0;
+    tcp_connect(&sockfd, host, port, dtlsUDP, dtlsSCTP, ssl, fastopen_connect);
     if (wolfSSL_set_fd(ssl, sockfd) != WOLFSSL_SUCCESS) {
         err_sys("error in setting fd");
     }
@@ -2069,7 +2071,8 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
     }
 #endif
 
-    tcp_connect(&sockfd, host, port, dtlsUDP, dtlsSCTP, ssl);
+    const int fastopen_connect = 0;
+    tcp_connect(&sockfd, host, port, dtlsUDP, dtlsSCTP, ssl, fastopen_connect);
     if (wolfSSL_set_fd(ssl, sockfd) != WOLFSSL_SUCCESS) {
         wolfSSL_free(ssl); ssl = NULL;
         wolfSSL_CTX_free(ctx); ctx = NULL;
@@ -2357,7 +2360,9 @@ THREAD_RETURN WOLFSSL_THREAD client_test(void* args)
             sleep(1);
 #endif
         }
-        tcp_connect(&sockfd, host, port, dtlsUDP, dtlsSCTP, sslResume);
+
+        const int fastopen_connect_for_resume = 1;
+        tcp_connect(&sockfd, host, port, dtlsUDP, dtlsSCTP, sslResume, fastopen_connect_for_resume);
         if (wolfSSL_set_fd(sslResume, sockfd) != WOLFSSL_SUCCESS) {
             wolfSSL_free(sslResume); sslResume = NULL;
             wolfSSL_CTX_free(ctx); ctx = NULL;

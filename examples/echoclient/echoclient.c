@@ -179,7 +179,8 @@ void echoclient_test(void* args)
 #endif /* WOLFSSL_ASYNC_CRYPT */
 
     ssl = SSL_new(ctx);
-    tcp_connect(&sockfd, yasslIP, port, doDTLS, 0, ssl);
+    const int fastopen_connect = 0;
+    tcp_connect(&sockfd, yasslIP, port, doDTLS, 0, ssl, fastopen_connect);
 
     SSL_set_fd(ssl, sockfd);
 #if defined(USE_WINDOWS_API) && defined(CYASSL_DTLS) && defined(NO_MAIN_DRIVER)
