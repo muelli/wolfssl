@@ -1512,7 +1512,7 @@ static void test_client_nofail(void* args, void *cb)
 
     /* Do connect here so server detects failures */
     tcp_connect(&sockfd, wolfSSLIP, ((func_args*)args)->signal->port,
-                0, 0, NULL);
+                0, 0, NULL, 0);
 
     if (wolfSSL_CTX_load_verify_locations(ctx, caCertFile, 0) != WOLFSSL_SUCCESS)
     {
@@ -1817,11 +1817,11 @@ static void run_wolfssl_client(void* args)
     ssl = wolfSSL_new(ctx);
     if (wolfSSL_dtls(ssl)) {
         tcp_connect(&sfd, wolfSSLIP, ((func_args*)args)->signal->port,
-                    1, 0, ssl);
+                    1, 0, ssl, 0);
     }
     else {
         tcp_connect(&sfd, wolfSSLIP, ((func_args*)args)->signal->port,
-                    0, 0, ssl);
+                    0, 0, ssl, 0);
     }
     AssertIntEQ(WOLFSSL_SUCCESS, wolfSSL_set_fd(ssl, sfd));
 
@@ -18309,7 +18309,7 @@ static void test_wolfSSL_SESSION(void)
 
     /* client connection */
     ssl = wolfSSL_new(ctx);
-    tcp_connect(&sockfd, wolfSSLIP, ready.port, 0, 0, ssl);
+    tcp_connect(&sockfd, wolfSSLIP, ready.port, 0, 0, ssl, 0);
     AssertIntEQ(wolfSSL_set_fd(ssl, sockfd), SSL_SUCCESS);
 
     err = 0; /* Reset error */

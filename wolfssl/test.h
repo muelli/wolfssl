@@ -817,7 +817,8 @@ static WC_INLINE void tcp_socket(SOCKET_T* sockfd, int udp, int sctp)
 }
 
 static WC_INLINE void tcp_connect(SOCKET_T* sockfd, const char* ip, word16 port,
-                               int udp, int sctp, WOLFSSL* ssl)
+                               int udp, int sctp, WOLFSSL* ssl,
+                               int fastopen_connect)
 {
     SOCKADDR_IN_T addr;
     build_addr(&addr, ip, port, udp, sctp);
@@ -827,13 +828,14 @@ static WC_INLINE void tcp_connect(SOCKET_T* sockfd, const char* ip, word16 port,
     tcp_socket(sockfd, udp, sctp);
 
     if (!udp) {
-        const int ENABLE_FASTOPEN = 1;
-        if (ENABLE_FASTOPEN) {
+        if (fastopen_connect) {
             int opt = 1;
             int res;
             res = setsockopt(*sockfd, SOL_TCP, TCP_FASTOPEN_CONNECT, &opt, sizeof (opt));
             if (res < 0) {
                 err_sys("setsockopt TCP_FASTOPEN\n");
+            } else {
+                /* fprintf (stderr, "Setting FASTOPEN_COnneCT\n"); */
             }
         }
 
