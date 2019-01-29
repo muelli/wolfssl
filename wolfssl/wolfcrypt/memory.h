@@ -105,12 +105,12 @@ WOLFSSL_API int wolfSSL_GetAllocators(wolfSSL_Malloc_cb*,
             /* certificate extensions requires 24k for the SSL struct */
             #define WOLFMEM_BUCKETS 64,128,256,512,1024,2432,3456,4544,24576
         #else
-            /* having session certs enabled makes a 21k SSL struct */
-            #define WOLFMEM_BUCKETS 64,128,256,512,1024,2432,3456,4544,21920
+            /* increase 23k for object member of WOLFSSL_X509_NAME_ENTRY */
+            #define WOLFMEM_BUCKETS 64,128,256,512,1024,2432,3456,4544,23440
         #endif
     #endif
     #ifndef WOLFMEM_DIST
-        #define WOLFMEM_DIST    8,4,4,12,4,5,8,1,1
+        #define WOLFMEM_DIST    49,10,6,14,5,6,9,1,1
     #endif
 
     /* flags for loading static memory (one hot bit) */

@@ -74,6 +74,8 @@
     /* do nothing */
 #elif defined(FREESCALE_FREE_RTOS)
     #include "fsl_os_abstraction.h"
+#elif defined(WOLFSSL_VXWORKS)
+    #include <semLib.h>
 #elif defined(WOLFSSL_uITRON4)
     #include "stddef.h"
     #include "kernel.h"
@@ -151,6 +153,8 @@
         typedef MUTEX_STRUCT wolfSSL_Mutex;
     #elif defined(FREESCALE_FREE_RTOS)
         typedef mutex_t wolfSSL_Mutex;
+    #elif defined(WOLFSSL_VXWORKS)
+        typedef SEM_ID wolfSSL_Mutex;
     #elif defined(WOLFSSL_uITRON4)
         typedef struct wolfSSL_Mutex {
             T_CSEM sem ;
@@ -308,6 +312,8 @@ WOLFSSL_API int wolfCrypt_Cleanup(void);
     #define XSEEK_END  2
     #define XBADFILE   NULL
     #define XFGETS(b,s,f) -2 /* Not ported yet */
+#elif defined(WOLFSSL_USER_FILESYSTEM)
+    /* To be defined in user_settings.h */
 #else
     /* stdio, default case */
     #include <stdio.h>
@@ -357,6 +363,8 @@ WOLFSSL_API int wolfCrypt_Cleanup(void);
         char name[MAX_FILENAME_SZ];
     } ReadDirCtx;
 
+    #define WC_READDIR_NOFILE -1
+
     WOLFSSL_API int wc_ReadDirFirst(ReadDirCtx* ctx, const char* path, char** name);
     WOLFSSL_API int wc_ReadDirNext(ReadDirCtx* ctx, const char* path, char** name);
     WOLFSSL_API void wc_ReadDirClose(ReadDirCtx* ctx);
@@ -382,8 +390,12 @@ WOLFSSL_API int wolfCrypt_Cleanup(void);
        time_t XTIME(time_t * timer) {}
     */
     #define WOLFSSL_GMTIME
-    #define USE_WOLF_TM
-    #define USE_WOLF_TIME_T
+    #ifndef HAVE_TM_TYPE
+        #define USE_WOLF_TM
+    #endif
+    #ifndef HAVE_TIME_T_TYPE
+        #define USE_WOLF_TIME_T
+    #endif
 
 #elif defined(TIME_OVERRIDES)
     /* Override XTIME() and XGMTIME() functionality.
@@ -435,8 +447,7 @@ WOLFSSL_API int wolfCrypt_Cleanup(void);
     #endif
     #define XGMTIME(c, t)   gmtime((c))
 
-#elif defined(WOLFSSL_ATMEL)
-    extern long atmel_get_curr_time_and_date(long* tm);
+#elif defined(WOLFSSL_ATMEL) && defined(WOLFSSL_ATMEL_TIME)
     #define XTIME(t1)       atmel_get_curr_time_and_date((t1))
     #define WOLFSSL_GMTIME
     #define USE_WOLF_TM
@@ -470,10 +481,23 @@ WOLFSSL_API int wolfCrypt_Cleanup(void);
 
     /* PowerPC time_t is int */
     #ifdef __PPC__
-        #define TIME_T_NOT_LONG
+        #define TIME_T_NOT_64BIT
     #endif
 #endif
 
+#ifdef SIZEOF_TIME_T
+    /* check if size of time_t from autoconf is less than 8 bytes (64bits) */
+    #if SIZEOF_TIME_T < 8
+        #undef  TIME_T_NOT_64BIT
+        #define TIME_T_NOT_64BIT
+    #endif
+#endif
+#ifdef TIME_T_NOT_LONG
+    /* one old reference to TIME_T_NOT_LONG in GCC-ARM example README
+     * this keeps support for the old macro name */
+    #undef  TIME_T_NOT_64BIT
+    #define TIME_T_NOT_64BIT
+#endif
 
 /* Map default time functions */
 #if !defined(XTIME) && !defined(TIME_OVERRIDES) && !defined(USER_TIME)

@@ -2,6 +2,15 @@
 
 # ocsp-stapling.test
 
+
+./examples/client/client -v 3 2>&1 | grep -- 'Bad SSL version'
+if [ $? -eq 0 ]; then
+    echo "TLS 1.2 or lower required"
+    echo "Skipped"
+    exit 0
+fi
+
+
 # create a unique ready file ending in PID for the script instance ($$) to take
 # advantage of port zero solution
 WORKSPACE=`pwd`
@@ -158,7 +167,7 @@ if [ $? -eq 0 ]; then
 fi
 
 # check if supported key size is large enough to handle 4096 bit RSA
-size=`./examples/client/client -? | grep "Max key"`
+size=`./examples/client/client -? | grep "Max RSA key"`
 size=`echo ${size//[^0-9]/}`
 if [ ! -z "$size" ]; then
     printf 'check on max key size of %d ...' $size
@@ -168,6 +177,33 @@ if [ ! -z "$size" ]; then
     fi
     printf 'OK\n'
 fi
+
+# test interop fail case
+ready_file=`pwd`/wolf_ocsp_readyF$$
+printf '%s\n' "ready file:  $ready_file"
+./examples/server/server -o -R $ready_file &
+wolf_pid=$!
+wait_for_readyFile $ready_file
+if [ ! -f $ready_file ]; then
+    printf '%s\n' "Failed to create ready file: \"$ready_file\""
+    exit 1
+else
+    # should fail if ocspstapling is also enabled
+    RPORTSELECTED=`cat $ready_file`
+    echo "hi" | openssl s_client -status -connect 127.0.0.1:${RPORTSELECTED} -cert ./certs/client-cert.pem -key ./certs/client-key.pem -CAfile ./certs/ocsp/root-ca-cert.pem
+    if [ $? -eq 0 ]; then
+        printf '%s\n' "Succeeded when should have failed"
+        remove_single_rF $ready_file
+        exit 1
+    fi
+    remove_single_rF $ready_file
+    wait $wolf_pid
+    if [ $? -ne 1 ]; then
+        printf '%s\n' "wolfSSL server unexpected fail value"
+        exit 1
+    fi
+fi
+
 
 # create a port 0 port to use with openssl ocsp responder
 ./examples/server/server -R $ready_file -p $resume_port &

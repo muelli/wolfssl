@@ -7,7 +7,7 @@
 #
 AC_COPYRIGHT([Copyright (C) 2006-2018 wolfSSL Inc.])
 AC_PREREQ([2.63])
-AC_INIT([wolfssl],[3.15.3],[https://github.com/wolfssl/wolfssl/issues],[wolfssl],[https://www.wolfssl.com])
+AC_INIT([wolfssl],[3.15.7],[https://github.com/wolfssl/wolfssl/issues],[wolfssl],[https://www.wolfssl.com])
 AC_CONFIG_AUX_DIR([build-aux])
 
 # The following sets CFLAGS and CXXFLAGS to empty if unset on command line.
@@ -34,7 +34,7 @@ LT_PREREQ([2.2])
 LT_INIT([disable-static win32-dll])
 
 #shared library versioning
-WOLFSSL_LIBRARY_VERSION=18:0:0
+WOLFSSL_LIBRARY_VERSION=20:0:1
 #                        | | |
 #                 +------+ | +---+
 #                 |        |     |
@@ -66,6 +66,7 @@ AS_IF([ test -n "$CFLAG_VISIBILITY" ], [
 # checks to fail.
 AC_CHECK_SIZEOF([long long])
 AC_CHECK_SIZEOF([long])
+AC_CHECK_SIZEOF([time_t])
 AC_CHECK_TYPES([__uint128_t])
 AC_CHECK_FUNCS([gethostbyname getaddrinfo gettimeofday gmtime_r inet_ntoa memset socket])
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h limits.h netdb.h netinet/in.h stddef.h sys/ioctl.h sys/socket.h sys/time.h errno.h])
@@ -198,17 +199,14 @@ AM_CONDITIONAL([BUILD_ALL], [test "x$ENABLED_ALL" = "xyes"])
 
 
 # Support for forcing 32-bit mode
+# To force 32-bit instructions use:
+#   ./configure CFLAGS="-m32" LDFLAGS="-m32" && make
+# The checks for sizeof long and long/long are run at the top of configure and require "-m32" to be set directly in the ./configure statement.
 AC_ARG_ENABLE([32bit],
     [AS_HELP_STRING([--enable-32bit],[Enables 32-bit support (default: disabled)])],
     [ ENABLED_32BIT=$enableval ],
     [ ENABLED_32BIT=no ]
     )
-
-if test "$ENABLED_32BIT" = "yes"
-then
-    AM_CFLAGS="$AM_CFLAGS -DNO_64BIT -DNO_CURVED25519_128BIT -m32"
-    AM_LDFLAGS="$AM_LDFLAGS -m32"
-fi
 
 
 # Support for disabling all ASM
@@ -578,7 +576,11 @@ AC_ARG_ENABLE([harden],
 
 if test "$ENABLED_HARDEN" = "yes"
 then
-    AM_CFLAGS="$AM_CFLAGS -DTFM_TIMING_RESISTANT -DECC_TIMING_RESISTANT -DWC_RSA_BLINDING"
+    AM_CFLAGS="$AM_CFLAGS -DTFM_TIMING_RESISTANT -DECC_TIMING_RESISTANT"
+    if test "$ENABLED_RNG" = "yes"
+    then
+        AM_CFLAGS="$AM_CFLAGS -DWC_RSA_BLINDING"
+    fi
 else
     AM_CFLAGS="$AM_CFLAGS -DWC_NO_HARDEN"
 fi
@@ -669,7 +671,7 @@ AC_ARG_ENABLE([lowresource],
 if test "$ENABLED_LOWRESOURCE" = "yes"
 then
     # low memory / flash flags
-    AM_CFLAGS="$AM_CFLAGS -DNO_SESSION_CACHE -DRSA_LOW_MEM -DALT_ECC_SIZE -DGCM_SMALL -DCURVE25519_SMALL -DED25519_SMALL"
+    AM_CFLAGS="$AM_CFLAGS -DNO_SESSION_CACHE -DRSA_LOW_MEM -DALT_ECC_SIZE -DGCM_SMALL -DCURVE25519_SMALL -DED25519_SMALL -DWOLFSSL_SMALL_CERT_VERIFY"
 
     # low flash flags
     AM_CFLAGS="$AM_CFLAGS -DUSE_SLOW_SHA -DUSE_SLOW_SHA256 -DUSE_SLOW_SHA512"
@@ -782,6 +784,50 @@ then
 fi
 
 AM_CONDITIONAL([BUILD_PKCALLBACKS],   [ test "x$ENABLED_PKCALLBACKS" = "xyes" ])
+
+
+# Microchip/Atmel CryptoAuthLib
+ENABLED_CRYPTOAUTHLIB="no"
+trylibatcadir=""
+AC_ARG_WITH([cryptoauthlib],
+    [AS_HELP_STRING([--with-cryptoauthlib=PATH],[PATH to CryptoAuthLib install (default /usr/)])],
+    [
+        AC_MSG_CHECKING([for cryptoauthlib])
+        CPPFLAGS="$CPPFLAGS -DWOLFSSL_ATECC508A"
+        LIBS="$LIBS -lcryptoauth"
+
+        AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <cryptoauthlib.h>]], [[ atcab_init(0); ]])],[ libatca_linked=yes ],[ libatca_linked=no ])
+
+        if test "x$libatca_linked" == "xno" ; then
+            if test "x$withval" != "xno" ; then
+                trylibatcadir=$withval
+            fi
+            if test "x$withval" == "xyes" ; then
+                trylibatcadir="/usr"
+            fi
+
+            LDFLAGS="$LDFLAGS -L$trylibatcadir/lib"
+            CPPFLAGS="$CPPFLAGS -I$trylibatcadir/lib"
+
+            AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <cryptoauthlib.h>]], [[ atcab_init(0); ]])],[ libatca_linked=yes ],[ libatca_linked=no ])
+
+            if test "x$libatca_linked" == "xno" ; then
+                AC_MSG_ERROR([cryptoauthlib isn't found.
+                If it's already installed, specify its path using --with-cryptoauthlib=/dir/])
+            fi
+
+            AM_LDFLAGS="$AM_LDFLAGS -L$trylibatcadir/lib"
+            AM_CFLAGS="$AM_CFLAGS -I$trylibatcadir/lib"
+            AC_MSG_RESULT([yes])
+        else
+            AC_MSG_RESULT([yes])
+        fi
+
+        ENABLED_CRYPTOAUTHLIB="yes"
+        AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_ATECC508A"
+    ]
+)
+AM_CONDITIONAL([BUILD_CRYPTOAUTHLIB], [test "x$ENABLED_CRYPTOAUTHLIB" = "xyes"])
 
 
 # sniffer doesn't work in maxstrength mode
@@ -919,8 +965,24 @@ then
     *)
         case $host_cpu in
         *aarch64*)
-	    #+crypto needed for hardware acceleration
+            # +crypto needed for hardware acceleration
             AM_CPPFLAGS="$AM_CPPFLAGS -mcpu=generic+crypto"
+
+            # Check for and set -mstrict-align compiler flag
+            # Used to set assumption that Aarch64 systems will not handle
+            #   unaligned memory references. The flag -mstrict-align is needed
+            #   on some compiler versions to avoid an invalid addressing mode
+            #   error with  "m" constraint variables in the inline assembly AES
+            #   code. Even though unaligned load/store access is permitted on
+            #   normal memory with Cortex-A series boards with the exception
+            #   being exclusive and ordered access.
+            case $CPPFLAGS in
+                *mstrict-align*)
+                    break;; # already set by user
+                *)
+                    AM_CPPFLAGS="$AM_CPPFLAGS -mstrict-align"
+                    AC_MSG_NOTICE([64bit ARMv8, setting -mstrict-align]);;
+            esac
             AC_MSG_NOTICE([64bit ARMv8 found, setting mcpu to generic+crypto]);;
         *)
             AM_CPPFLAGS="$AM_CPPFLAGS -mfpu=crypto-neon-fp-armv8"
@@ -1016,7 +1078,83 @@ then
     AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_AFALG_HASH"
 fi
 
+if test "$ENABLED_AFALG" = "xilinx"
+then
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_AFALG_XILINX -DWOLFSSL_AFALG_XILINX_AES"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_AFALG_XILINX_SHA3 -DWOLFSSL_AFALG_XILINX_RSA"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_NOSHA3_224 -DWOLFSSL_NOSHA3_256 -DWOLFSSL_NOSHA3_512"
+    ENABLED_AFALG="yes"
+    ENABLED_XILINX="yes"
+fi
+
+if test "$ENABLED_AFALG" = "xilinx-aes"
+then
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_AFALG_XILINX -DWOLFSSL_AFALG_XILINX_AES"
+    ENABLED_AFALG="yes"
+    ENABLED_XILINX="yes"
+fi
+
+if test "$ENABLED_AFALG" = "xilinx-sha3"
+then
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_AFALG_XILINX"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_AFALG_XILINX_SHA3"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_NOSHA3_224 -DWOLFSSL_NOSHA3_256 -DWOLFSSL_NOSHA3_512"
+    ENABLED_AFALG="yes"
+    ENABLED_XILINX="yes"
+fi
+
+if test "$ENABLED_AFALG" = "xilinx-rsa"
+then
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_AFALG_XILINX"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_AFALG_XILINX_RSA"
+    ENABLED_AFALG="yes"
+    ENABLED_XILINX="yes"
+fi
+
 AM_CONDITIONAL([BUILD_AFALG], [test "x$ENABLED_AFALG" = "xyes"])
+
+
+# Support for Linux dev/crypto calls
+AC_ARG_ENABLE([devcrypto],
+    [AS_HELP_STRING([--enable-devcrypto],[Enable Linux dev crypto calls: all | aes (all aes support) | hash (all hash algos) | cbc (aes-cbc only) (default: disabled)])],
+    [ ENABLED_DEVCRYPTO=$enableval ],
+    [ ENABLED_DEVCRYPTO=no ]
+    )
+
+if test "$ENABLED_DEVCRYPTO" = "yes" || test "$ENABLED_DEVCRYPTO" = "all"
+then
+    #enable all devcrypto supported algorithms
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_DEVCRYPTO"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_DEVCRYPTO_CBC"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_DEVCRYPTO_AES"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_DEVCRYPTO_HASH"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_NO_HASH_RAW"
+    ENABLED_DEVCRYPTO=yes
+fi
+if test "$ENABLED_DEVCRYPTO" = "aes"
+then
+    #enable only AES-CBC algorithm support
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_DEVCRYPTO"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_DEVCRYPTO_AES"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_DEVCRYPTO_CBC"
+    ENABLED_DEVCRYPTO=yes
+fi
+if test "$ENABLED_DEVCRYPTO" = "cbc"
+then
+    #enable only AES-CBC algorithm support
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_DEVCRYPTO"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_DEVCRYPTO_CBC"
+    ENABLED_DEVCRYPTO=yes
+fi
+if test "$ENABLED_DEVCRYPTO" = "hash"
+then
+    #enable only hash algorithm support
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_DEVCRYPTO"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_DEVCRYPTO_HASH"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_NO_HASH_RAW"
+    ENABLED_DEVCRYPTO=yes
+fi
+AM_CONDITIONAL([BUILD_DEVCRYPTO], [test "x$ENABLED_DEVCRYPTO" = "xyes"])
 
 
 # Camellia
@@ -1397,7 +1535,7 @@ then
         ENABLED_CURVE25519=yes
     fi
 
-    if test "$ENABLED_CURVE25519" = "no128bit"
+    if test "$ENABLED_CURVE25519" = "no128bit" || test "$ENABLED_32BIT" = "yes"
     then
         AM_CFLAGS="$AM_CFLAGS -DNO_CURVED25519_128BIT"
         ENABLED_CURVE25519=yes
@@ -1589,7 +1727,7 @@ if test "$ENABLED_STACKSIZE" = "yes"
 then
     AC_CHECK_FUNC([posix_memalign], [], [AC_MSG_ERROR(stacksize needs posix_memalign)])
     AC_CHECK_FUNC([pthread_attr_setstack], [], AC_CHECK_LIB([pthread],[pthread_attr_setstack]))
-    AM_CFLAGS="$AM_CFLAGS -DHAVE_STACK_SIZE -DWOLFSSL_LOW_MEMORY"
+    AM_CFLAGS="$AM_CFLAGS -DHAVE_STACK_SIZE"
 fi
 
 
@@ -1645,6 +1783,19 @@ then
 fi
 
 
+# STACK usage logging
+AC_ARG_ENABLE([stacklog],
+    [AS_HELP_STRING([--enable-stacklog],[Enable stack logging (default: disabled)])],
+    [ ENABLED_STACKLOG=$enableval ],
+    [ ENABLED_STACKLOG=no ]
+    )
+
+if test "$ENABLED_STACKLOG" = "yes"
+then
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_STACK_LOG -finstrument-functions"
+fi
+
+
 
 # RSA
 AC_ARG_ENABLE([rsa],
@@ -1663,6 +1814,48 @@ else
         AM_CFLAGS="$AM_CFLAGS -DNO_RSA"
         ENABLED_RSA=no
     fi
+fi
+
+AC_ARG_ENABLE([oaep],
+    [AS_HELP_STRING([--enable-oaep],[Enable RSA OAEP (default: enabled)])],
+    [ ENABLED_OAEP=$enableval ],
+    [ ENABLED_OAEP=yes ]
+    )
+
+if test "$ENABLED_OAEP" = "no"
+then
+    AM_CFLAGS="$AM_CFLAGS -DWC_NO_RSA_OAEP"
+fi
+
+AC_ARG_ENABLE([rsapub],
+    [AS_HELP_STRING([--enable-rsapub],[Enable RSA Public Only (default: disabled)])],
+    [ ENABLED_RSAPUB=$enableval ],
+    [ ENABLED_RSAPUB=no ]
+    )
+
+if test "$ENABLED_RSAPUB" = "yes"
+then
+    if test "$ENABLED_RSA" = "no"
+    then
+        ENABLED_RSA="yes"
+    fi
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_RSA_PUBLIC_ONLY"
+fi
+
+AC_ARG_ENABLE([rsavfy],
+    [AS_HELP_STRING([--enable-rsavfy],[Enable RSA Verify Inline Only (default: disabled)])],
+    [ ENABLED_RSAVFY=$enableval ],
+    [ ENABLED_RSAVFY=no ]
+    )
+
+if test "$ENABLED_RSAVFY" = "yes"
+then
+    if test "$ENABLED_RSA" = "no"
+    then
+        ENABLED_RSA="yes"
+    fi
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_RSA_PUBLIC_ONLY -DWOLFSSL_RSA_VERIFY_ONLY"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_RSA_VERIFY_INLINE -DNO_SIG_WRAPPER"
 fi
 
 AM_CONDITIONAL([BUILD_RSA], [test "x$ENABLED_RSA" = "xyes"])
@@ -1766,10 +1959,16 @@ else
     then
         AM_CFLAGS="$AM_CFLAGS -DNO_ASN -DNO_CERTS -DNO_BIG_INT"
         ENABLED_ASN=no
+    else
+        if test "$ENABLED_ASN" = "nocrypt"
+        then
+            AM_CFLAGS="$AM_CFLAGS -DNO_ASN_CRYPT"
+            enable_pwdbased=no
+        fi
     fi
 fi
 
-if test "$ENABLED_RSA" = "yes" && test "$ENABLED_ASN" = "no"
+if test "$ENABLED_RSA" = "yes" && test "$ENABLED_RSAVFY" = "no" && test "$ENABLED_ASN" = "no"
 then
     AC_MSG_ERROR([please disable rsa if disabling asn.])
 fi
@@ -1780,13 +1979,13 @@ then
 fi
 
 # DH and ECC need bigint
-if test "$ENABLED_ASN" = "no" && test "$ENABLED_DH" = "no" && test "$ENABLED_ECC" = "no"
+if test "$ENABLED_ASN" = "no" && test "$ENABLED_DH" = "no" && test "$ENABLED_ECC" = "no" && test "$ENABLED_RSA" = "no"
 then
     ENABLED_FASTMATH=no
     ENABLED_SLOWMATH=no
 fi
 
-AM_CONDITIONAL([BUILD_ASN], [test "x$ENABLED_ASN" = "xyes"])
+AM_CONDITIONAL([BUILD_ASN], [test "x$ENABLED_ASN" != "xno"])
 
 
 # AES
@@ -2165,7 +2364,7 @@ AM_CONDITIONAL([BUILD_SELFTEST], [test "x$ENABLED_SELFTEST" = "xyes"])
 SHA224_DEFAULT=no
 if test "$host_cpu" = "x86_64" || test "$host_cpu" = "aarch64"
 then
-    if test "x$ENABLED_AFALG" = "xno" && ( test "x$ENABLED_FIPS" = "xno" || test "x$FIPS_VERSION" = "xv2" )
+    if test "x$ENABLED_AFALG" = "xno" && test "x$ENABLED_DEVCRYPTO" = "xno" && ( test "x$ENABLED_FIPS" = "xno" || test "x$FIPS_VERSION" = "xv2" )
     then
         SHA224_DEFAULT=yes
     fi
@@ -2238,7 +2437,7 @@ then
     ENABLED_POLY1305=no
 fi
 
-if test "$ENABLED_POLY1305" = "yes" && test "$ENABLED_32BIT" = "no"
+if test "$ENABLED_POLY1305" = "yes"
 then
     AM_CFLAGS="$AM_CFLAGS -DHAVE_POLY1305 -DHAVE_ONE_TIME_AUTH"
 fi
@@ -2705,7 +2904,7 @@ then
     then
         AC_MSG_ERROR([cannot enable renegotiation-indication and secure-renegotiation.])
     fi
-    AM_CFLAGS="$AM_CFLAGS -DHAVE_TLS_EXTENSIONS -DHAVE_SECURE_RENEGOTIATION"
+    AM_CFLAGS="$AM_CFLAGS -DHAVE_TLS_EXTENSIONS -DHAVE_SECURE_RENEGOTIATION -DHAVE_SERVER_RENEGOTIATION_INFO"
 fi
 
 # Supported Elliptic Curves Extensions
@@ -2781,6 +2980,13 @@ AC_ARG_ENABLE([earlydata],
     [ ENABLED_TLS13_EARLY_DATA=$enableval ],
     [ ENABLED_TLS13_EARLY_DATA=no ]
     )
+
+if test "$ENABLED_TLS13_EARLY_DATA" = "group"
+then
+    ENABLED_TLS13_EARLY_DATA="yes"
+    # Group EarlyData with ClientHello
+    AM_CFLAGS="-DWOLFSSL_EARLY_DATA_GROUP $AM_CFLAGS"
+fi
 if test "$ENABLED_TLS13_EARLY_DATA" = "yes"
 then
     if test "x$ENABLED_TLS13" = "xno"
@@ -2792,6 +2998,11 @@ then
         AC_MSG_ERROR([cannot enable earlydata without enabling session tickets and/or PSK.])
     fi
     AM_CFLAGS="-DWOLFSSL_EARLY_DATA $AM_CFLAGS"
+fi
+
+if test "$ENABLED_TLSV12" = "no" && test "$ENABLED_TLS13" = "yes" && test "x$ENABLED_SESSION_TICKET" = "xno"
+then
+    AM_CFLAGS="$AM_CFLAGS -DNO_SESSION_CACHE"
 fi
 
 
@@ -3088,7 +3299,7 @@ then
     fi
 fi
 
-if test "$ENABLED_NGINX" = "yes"|| test "x$ENABLED_HAPROXY" = "xyes"
+if test "$ENABLED_NGINX" = "yes"|| test "x$ENABLED_HAPROXY" = "xyes" || test "x$ENABLED_LIGHTY" = "xyes"
 then
     AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_ALWAYS_VERIFY_CB"
     AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_ALWAYS_KEEP_SNI"
@@ -3335,247 +3546,13 @@ then
         # for TLS connections the intermediate hash needs to store buffer
         AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_AFALG_HASH_KEEP"
     fi
-fi
 
-
-# set fastmath default
-FASTMATH_DEFAULT=no
-
-if test "$host_cpu" = "x86_64" || test "$host_cpu" = "aarch64"
-then
-    FASTMATH_DEFAULT=yes
-fi
-
-# fastmath
-AC_ARG_ENABLE([fastmath],
-    [AS_HELP_STRING([--enable-fastmath],[Enable fast math ops (default: enabled on x86_64/aarch64)])],
-    [ ENABLED_FASTMATH=$enableval ],
-    [ ENABLED_FASTMATH=$FASTMATH_DEFAULT]
-    )
-
-if test "x$ENABLED_FASTMATH" = "xyes"
-then
-    # turn off fastmth if leanpsk on or asn off (w/o DH and ECC)
-    if test "$ENABLED_LEANPSK" = "yes" || test "$ENABLED_ASN" = "no"
+    if test "$ENABLED_DEVCRYPTO" = "yes"
     then
-        if test "$ENABLED_DH" = "no" && test "$ENABLED_ECC" = "no"
-        then
-            ENABLED_FASTMATH=no
-        else
-            AM_CFLAGS="$AM_CFLAGS -DUSE_FAST_MATH"
-            ENABLED_SLOWMATH="no"
-        fi
-    else
-        AM_CFLAGS="$AM_CFLAGS -DUSE_FAST_MATH"
-        ENABLED_SLOWMATH="no"
-    fi
-    if test "$host_cpu" = "x86_64"
-    then
-        # Have settings.h set FP_MAX_BITS higher if user didn't set directly
-        AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_X86_64_BUILD"
+        # for TLS connections the intermediate hash needs to store buffer
+        AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_DEVCRYPTO_HASH_KEEP"
     fi
 fi
-
-
-# fast HUGE math
-AC_ARG_ENABLE([fasthugemath],
-    [AS_HELP_STRING([--enable-fasthugemath],[Enable fast math + huge code (default: disabled)])],
-    [ ENABLED_FASTHUGEMATH=$enableval ],
-    [ ENABLED_FASTHUGEMATH=no ]
-    )
-
-if test "$ENABLED_BUMP" = "yes"
-then
-    ENABLED_FASTHUGEMATH="yes"
-fi
-
-if test "$ENABLED_FASTHUGEMATH" = "yes"
-then
-    ENABLED_FASTMATH="yes"
-    AM_CFLAGS="$AM_CFLAGS -DUSE_FAST_MATH"
-    ENABLED_SLOWMATH="no"
-fi
-
-AM_CONDITIONAL([BUILD_FASTMATH], [test "x$ENABLED_FASTMATH" = "xyes"])
-AM_CONDITIONAL([BUILD_SLOWMATH], [test "x$ENABLED_SLOWMATH" = "xyes"])
-
-
-# Enable Examples, used to disable examples
-AC_ARG_ENABLE([examples],
-    [AS_HELP_STRING([--enable-examples],[Enable Examples  (default: enabled)])],
-    [ ENABLED_EXAMPLES=$enableval ],
-    [ ENABLED_EXAMPLES=yes ]
-    )
-
-AS_IF([test "x$ENABLED_FILESYSTEM" = "xno"], [ENABLED_EXAMPLES="no"])
-AS_IF([test "x$ENABLED_INLINE" = "xno"], [ENABLED_EXAMPLES="no"])
-AS_IF([test "x$ENABLED_CRYPTONLY" = "xyes"], [ENABLED_EXAMPLES="no"])
-AM_CONDITIONAL([BUILD_EXAMPLE_SERVERS], [test "x$ENABLED_EXAMPLES" = "xyes" && test "x$ENABLED_LEANTLS" = "xno"])
-AM_CONDITIONAL([BUILD_EXAMPLE_CLIENTS], [test "x$ENABLED_EXAMPLES" = "xyes"])
-AM_CONDITIONAL([BUILD_TESTS], [test "x$ENABLED_EXAMPLES" = "xyes" && test "x$ENABLED_LEANTLS" = "xno"])
-AM_CONDITIONAL([BUILD_THREADED_EXAMPLES], [test "x$ENABLED_SINGLETHREADED" = "xno" && test "x$ENABLED_EXAMPLES" = "xyes" && test "x$ENABLED_LEANTLS" = "xno"])
-
-# Enable wolfCrypt test and benchmark
-AC_ARG_ENABLE([crypttests],
-    [AS_HELP_STRING([--enable-crypttests],[Enable Crypt Bench/Test  (default: enabled)])],
-    [ ENABLED_CRYPT_TESTS=$enableval ],
-    [ ENABLED_CRYPT_TESTS=yes ]
-    )
-
-AM_CONDITIONAL([BUILD_WOLFCRYPT_TESTS], [test "x$ENABLED_CRYPT_TESTS" = "xyes"])
-
-# LIBZ
-ENABLED_LIBZ="no"
-trylibzdir=""
-AC_ARG_WITH([libz],
-    [  --with-libz=PATH        PATH to libz install (default /usr/) ],
-    [
-        AC_MSG_CHECKING([for libz])
-        CPPFLAGS="$CPPFLAGS -DHAVE_LIBZ"
-        LIBS="$LIBS -lz"
-
-        AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <zlib.h>]], [[ deflateInit(0, 8); ]])],[ libz_linked=yes ],[ libz_linked=no ])
-
-        if test "x$libz_linked" == "xno" ; then
-            if test "x$withval" != "xno" ; then
-                trylibzdir=$withval
-            fi
-            if test "x$withval" == "xyes" ; then
-                trylibzdir="/usr"
-            fi
-
-            AM_LDFLAGS="$AM_LDFLAGS -L$trylibzdir/lib"
-            CPPFLAGS="$CPPFLAGS -I$trylibzdir/include"
-
-            AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <zlib.h>]], [[ deflateInit(0, 8); ]])],[ libz_linked=yes ],[ libz_linked=no ])
-
-            if test "x$libz_linked" == "xno" ; then
-                AC_MSG_ERROR([libz isn't found.
-                If it's already installed, specify its path using --with-libz=/dir/])
-            fi
-            AC_MSG_RESULT([yes])
-        else
-            AC_MSG_RESULT([yes])
-        fi
-        ENABLED_LIBZ="yes"
-    ]
-)
-AM_CONDITIONAL([BUILD_LIBZ], [test "x$ENABLED_LIBZ" = "xyes"])
-
-
-# cavium
-trycaviumdir=""
-AC_ARG_WITH([cavium],
-    [  --with-cavium=PATH      PATH to cavium/software dir ],
-    [
-        AC_MSG_CHECKING([for cavium])
-        CPPFLAGS="$CPPFLAGS -DHAVE_CAVIUM"
-        LIB_ADD="-lrt $LIB_ADD"
-
-        if test "x$withval" == "xyes" ; then
-            AC_MSG_ERROR([need a PATH for --with-cavium])
-        fi
-        if test "x$withval" != "xno" ; then
-            trycaviumdir=$withval
-        fi
-
-        LDFLAGS="$AM_LDFLAGS $trycaviumdir/api/cavium_common.o"
-        CPPFLAGS="$CPPFLAGS -I$trycaviumdir/include"
-
-        AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include "cavium_common.h"]], [[ CspShutdown(CAVIUM_DEV_ID); ]])],[ cavium_linked=yes ],[ cavium_linked=no ])
-
-        if test "x$cavium_linked" == "xno" ; then
-            AC_MSG_ERROR([cavium isn't found.
-            If it's already installed, specify its path using --with-cavium=/dir/])
-        else
-            AM_CFLAGS="$AM_CFLAGS -DHAVE_CAVIUM"
-        fi
-        AC_MSG_RESULT([yes])
-        enable_shared=no
-        enable_static=yes
-        ENABLED_CAVIUM=yes
-    ],
-    [ ENABLED_CAVIUM=no ]
-)
-
-# cavium V
-trycaviumdir=""
-AC_ARG_WITH([cavium-v],
-    [  --with-cavium-v=PATH    PATH to Cavium V/software dir ],
-    [
-        AC_MSG_CHECKING([for cavium])
-        AM_CFLAGS="$AM_CFLAGS -DHAVE_CAVIUM -DHAVE_CAVIUM_V"
-        LIB_ADD="-lrt -lcrypto $LIB_ADD"
-
-        if test "x$withval" == "xyes" ; then
-            AC_MSG_ERROR([need a PATH for --with-cavium])
-        fi
-        if test "x$withval" != "xno" ; then
-            trycaviumdir=$withval
-        fi
-
-        AC_CHECK_FILES([$trycaviumdir/lib/libnitrox.a], [AM_CPPFLAGS="-I$trycaviumdir/include $AM_CPPFLAGS"], [ENABLED_CAVIUM_V=no])
-        LIB_STATIC_ADD="$trycaviumdir/lib/libnitrox.a $LIB_STATIC_ADD"
-
-        if test "$ENABLED_CAVIUM_V" = "no"; then
-            AC_MSG_ERROR([Could not find Nitrox library])
-        fi
-
-        enable_shared=no
-        enable_static=yes
-        enable_opensslextra=yes
-
-        ENABLED_CAVIUM=yes
-        ENABLED_CAVIUM_V=yes
-    ],
-    [
-        ENABLED_CAVIUM_=no
-        ENABLED_CAVIUM_V=no
-    ]
-)
-
-AM_CONDITIONAL([BUILD_CAVIUM], [test "x$ENABLED_CAVIUM" = "xyes"])
-AM_CONDITIONAL([BUILD_CAVIUM_V], [test "x$ENABLED_CAVIUM_V" = "xyes"])
-
-
-# Intel Quick Assist
-tryqatdir=""
-AC_ARG_WITH([intelqa],
-    [  --with-intelqa=PATH     PATH to Intel QuickAssit (QAT) driver dir ],
-    [
-        AC_MSG_CHECKING([for intelqa])
-        CPPFLAGS="$CPPFLAGS -DHAVE_INTEL_QA -DDO_CRYPTO -DUSER_SPACE"
-
-        if test "x$withval" == "xyes" ; then
-            AC_MSG_ERROR([need a PATH for --with-intelqa])
-        fi
-        if test "x$withval" != "xno" ; then
-            tryqatdir=$withval
-        fi
-
-        CPPFLAGS="$CPPFLAGS -I$tryqatdir/quickassist/include -I$tryqatdir/quickassist/include/lac -I$tryqatdir/quickassist/utilities/osal/include -I$tryqatdir/quickassist/utilities/osal/src/linux/user_space/include -I$tryqatdir/quickassist/lookaside/access_layer/include -I$tryqatdir/quickassist/lookaside/access_layer/src/common/include -I$srcdir/wolfssl -I$srcdir/wolfssl/wolfcrypt/port/intel"
-        LDFLAGS="$LDFLAGS -L$tryqatdir/build -Wl,-Map=output.map"
-        LIBS="$LIBS -licp_qa_al_s"
-        LIB_ADD="-ladf_proxy -losal -lrt $LIB_ADD"
-
-        AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include "cpa_cy_common.h"]], [[ Cpa16U count = 0; cpaCyGetNumInstances(&count); ]])],[ intelqa_linked=yes ],[ intelqa_linked=no ])
-
-        if test "x$intelqa_linked" == "xno" ; then
-            AC_MSG_ERROR([Intel QuickAssist not found.
-            If it's already installed, specify its path using --with-intelqa=/dir/])
-        else
-            AM_CFLAGS="$AM_CFLAGS -DHAVE_INTEL_QA -DDO_CRYPTO -DUSER_SPACE"
-        fi
-        AC_MSG_RESULT([yes])
-
-        ENABLED_INTEL_QA=yes
-    ],
-    [
-        ENABLED_INTEL_QA=no
-    ]
-)
-
-AM_CONDITIONAL([BUILD_INTEL_QA], [test "x$ENABLED_INTEL_QA" = "xyes"])
 
 # Single Precision maths implementation
 AC_ARG_ENABLE([sp],
@@ -3697,8 +3674,18 @@ if test "$ENABLED_SP_ASM" = "yes"; then
     ENABLED_SP_ARM64_ASM=yes
     ;;
   *arm*)
-    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_SP_ARM32_ASM"
-    ENABLED_SP_ARM32_ASM=yes
+    if test $host_alias = "thumb"; then
+      AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_SP_ARM_THUMB_ASM -mthumb -march=armv6"
+      ENABLED_SP_ARM_THUMB_ASM=yes
+    else
+      if test $host_alias = "cortex"; then
+        AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_SP_ARM_CORTEX_ASM"
+        ENABLED_SP_ARM_CORTEX_ASM=yes
+      else
+        AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_SP_ARM32_ASM"
+        ENABLED_SP_ARM32_ASM=yes
+      fi
+    fi
     ;;
   *x86_64*)
     AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_SP_X86_64_ASM"
@@ -3732,10 +3719,10 @@ if test "$ENABLED_SP_MATH" = "yes"; then
         AC_MSG_ERROR([Cannot use single precision math and SRP])
     fi
     if test "$ENABLED_SP_RSA" = "no" && test "$ENABLED_RSA" = "yes"; then
-        AC_MSG_ERROR([Cannot use P256 single precision only math and RSA])
+        AC_MSG_ERROR([Cannot use Single Precision maths without RSA with RSA])
     fi
     if test "$ENABLED_SP_DH" = "no" && test "$ENABLED_DH" = "yes"; then
-        AC_MSG_ERROR([Cannot use P256 single precision only math and DH])
+        AC_MSG_ERROR([Cannot use Single Precision maths without DH with DH])
     fi
 fi
 if test "$ENABLED_SP_MATH" = "yes"; then
@@ -3746,8 +3733,288 @@ AM_CONDITIONAL([BUILD_SP], [test "x$ENABLED_SP" = "xyes"])
 AM_CONDITIONAL([BUILD_SP_C], [test "x$ENABLED_SP" = "xyes" && test "x$ENABLED_SP_ASM" = "xno" ])
 AM_CONDITIONAL([BUILD_SP_ARM64], [test "x$ENABLED_SP_ARM64_ASM" = "xyes" ])
 AM_CONDITIONAL([BUILD_SP_ARM32], [test "x$ENABLED_SP_ARM32_ASM" = "xyes" ])
+AM_CONDITIONAL([BUILD_SP_ARM_THUMB], [test "x$ENABLED_SP_ARM_THUMB_ASM" = "xyes" ])
+AM_CONDITIONAL([BUILD_SP_ARM_CORTEX], [test "x$ENABLED_SP_ARM_CORTEX_ASM" = "xyes" ])
 AM_CONDITIONAL([BUILD_SP_X86_64], [test "x$ENABLED_SP_X86_64_ASM" = "xyes" ])
 AM_CONDITIONAL([BUILD_SP_INT], [test "x$ENABLED_SP_MATH" = "xyes" ])
+
+
+# set fastmath default
+FASTMATH_DEFAULT=no
+
+if test "$host_cpu" = "x86_64" || test "$host_cpu" = "aarch64"
+then
+    FASTMATH_DEFAULT=yes
+fi
+if test "$ENABLED_SP_MATH" = "yes"
+then
+    FASTMATH_DEFAULT=no
+fi
+
+# fastmath
+AC_ARG_ENABLE([fastmath],
+    [AS_HELP_STRING([--enable-fastmath],[Enable fast math ops (default: enabled on x86_64/aarch64)])],
+    [ ENABLED_FASTMATH=$enableval ],
+    [ ENABLED_FASTMATH=$FASTMATH_DEFAULT]
+    )
+
+if test "x$ENABLED_FASTMATH" = "xyes"
+then
+    # turn off fastmth if leanpsk on or asn off (w/o DH and ECC)
+    if test "$ENABLED_LEANPSK" = "yes" || test "$ENABLED_ASN" = "no"
+    then
+        if test "$ENABLED_DH" = "no" && test "$ENABLED_ECC" = "no" && test "$ENABLED_RSA" = "no"
+        then
+            ENABLED_FASTMATH=no
+        else
+            AM_CFLAGS="$AM_CFLAGS -DUSE_FAST_MATH"
+            ENABLED_SLOWMATH="no"
+        fi
+    else
+        AM_CFLAGS="$AM_CFLAGS -DUSE_FAST_MATH"
+        ENABLED_SLOWMATH="no"
+    fi
+    if test "$host_cpu" = "x86_64"
+    then
+        # Have settings.h set FP_MAX_BITS higher if user didn't set directly
+        AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_X86_64_BUILD"
+    fi
+fi
+
+
+# fast HUGE math
+AC_ARG_ENABLE([fasthugemath],
+    [AS_HELP_STRING([--enable-fasthugemath],[Enable fast math + huge code (default: disabled)])],
+    [ ENABLED_FASTHUGEMATH=$enableval ],
+    [ ENABLED_FASTHUGEMATH=no ]
+    )
+
+if test "$ENABLED_BUMP" = "yes"
+then
+    ENABLED_FASTHUGEMATH="yes"
+fi
+
+if test "$ENABLED_FASTHUGEMATH" = "yes"
+then
+    ENABLED_FASTMATH="yes"
+    AM_CFLAGS="$AM_CFLAGS -DUSE_FAST_MATH"
+    ENABLED_SLOWMATH="no"
+fi
+
+AM_CONDITIONAL([BUILD_FASTMATH], [test "x$ENABLED_FASTMATH" = "xyes"])
+AM_CONDITIONAL([BUILD_SLOWMATH], [test "x$ENABLED_SLOWMATH" = "xyes"])
+
+
+# Enable Examples, used to disable examples
+AC_ARG_ENABLE([examples],
+    [AS_HELP_STRING([--enable-examples],[Enable Examples  (default: enabled)])],
+    [ ENABLED_EXAMPLES=$enableval ],
+    [ ENABLED_EXAMPLES=yes ]
+    )
+
+AS_IF([test "x$ENABLED_FILESYSTEM" = "xno"], [ENABLED_EXAMPLES="no"])
+AS_IF([test "x$ENABLED_INLINE" = "xno"], [ENABLED_EXAMPLES="no"])
+AS_IF([test "x$ENABLED_CRYPTONLY" = "xyes"], [ENABLED_EXAMPLES="no"])
+AM_CONDITIONAL([BUILD_EXAMPLE_SERVERS], [test "x$ENABLED_EXAMPLES" = "xyes" && test "x$ENABLED_LEANTLS" = "xno"])
+AM_CONDITIONAL([BUILD_EXAMPLE_CLIENTS], [test "x$ENABLED_EXAMPLES" = "xyes"])
+AM_CONDITIONAL([BUILD_TESTS], [test "x$ENABLED_EXAMPLES" = "xyes" && test "x$ENABLED_LEANTLS" = "xno"])
+AM_CONDITIONAL([BUILD_THREADED_EXAMPLES], [test "x$ENABLED_SINGLETHREADED" = "xno" && test "x$ENABLED_EXAMPLES" = "xyes" && test "x$ENABLED_LEANTLS" = "xno"])
+
+# Enable wolfCrypt test and benchmark
+AC_ARG_ENABLE([crypttests],
+    [AS_HELP_STRING([--enable-crypttests],[Enable Crypt Bench/Test  (default: enabled)])],
+    [ ENABLED_CRYPT_TESTS=$enableval ],
+    [ ENABLED_CRYPT_TESTS=yes ]
+    )
+
+AM_CONDITIONAL([BUILD_WOLFCRYPT_TESTS], [test "x$ENABLED_CRYPT_TESTS" = "xyes"])
+
+# LIBZ
+ENABLED_LIBZ="no"
+trylibzdir=""
+AC_ARG_WITH([libz],
+    [  --with-libz=PATH        PATH to libz install (default /usr/) ],
+    [
+        AC_MSG_CHECKING([for libz])
+        CPPFLAGS="$CPPFLAGS -DHAVE_LIBZ"
+        LIBS="$LIBS -lz"
+
+        AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <zlib.h>]], [[ deflateInit(0, 8); ]])],[ libz_linked=yes ],[ libz_linked=no ])
+
+        if test "x$libz_linked" == "xno" ; then
+            if test "x$withval" != "xno" ; then
+                trylibzdir=$withval
+            fi
+            if test "x$withval" == "xyes" ; then
+                trylibzdir="/usr"
+            fi
+
+            LDFLAGS="$LDFLAGS -L$trylibzdir/lib"
+            CPPFLAGS="$CPPFLAGS -I$trylibzdir/include"
+
+            AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <zlib.h>]], [[ deflateInit(0, 8); ]])],[ libz_linked=yes ],[ libz_linked=no ])
+
+            if test "x$libz_linked" == "xno" ; then
+                AC_MSG_ERROR([libz isn't found.
+                If it's already installed, specify its path using --with-libz=/dir/])
+            fi
+            AC_MSG_RESULT([yes])
+        else
+            AC_MSG_RESULT([yes])
+        fi
+        ENABLED_LIBZ="yes"
+    ]
+)
+AM_CONDITIONAL([BUILD_LIBZ], [test "x$ENABLED_LIBZ" = "xyes"])
+
+
+# PKCS#11
+AC_ARG_ENABLE([pkcs11],
+    [AS_HELP_STRING([--enable-pkcs11],[Enable pkcs11 access (default: disabled)])],
+    [ ENABLED_PKCS11=$enableval ],
+    [ ENABLED_PKCS11=no ]
+    )
+
+if test "x$ENABLED_PKCS11" = "xyes"
+then
+    AM_CFLAGS="$AM_CFLAGS -DHAVE_PKCS11 -DHAVE_WOLF_BIGINT"
+    LIBS="$LIBS -ldl"
+fi
+AM_CONDITIONAL([BUILD_PKCS11], [test "x$ENABLED_PKCS11" = "xyes"])
+
+
+# cavium
+trycaviumdir=""
+AC_ARG_WITH([cavium],
+    [  --with-cavium=PATH      PATH to cavium/software dir ],
+    [
+        AC_MSG_CHECKING([for cavium])
+        CPPFLAGS="$CPPFLAGS -DHAVE_CAVIUM"
+        LIB_ADD="-lrt $LIB_ADD"
+
+        if test "x$withval" == "xyes" ; then
+            AC_MSG_ERROR([need a PATH for --with-cavium])
+        fi
+        if test "x$withval" != "xno" ; then
+            trycaviumdir=$withval
+        fi
+
+        LDFLAGS="$AM_LDFLAGS $trycaviumdir/api/cavium_common.o"
+        CPPFLAGS="$CPPFLAGS -I$trycaviumdir/include"
+
+        AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include "cavium_common.h"]], [[ CspShutdown(CAVIUM_DEV_ID); ]])],[ cavium_linked=yes ],[ cavium_linked=no ])
+
+        if test "x$cavium_linked" == "xno" ; then
+            AC_MSG_ERROR([cavium isn't found.
+            If it's already installed, specify its path using --with-cavium=/dir/])
+        else
+            AM_CFLAGS="$AM_CFLAGS -DHAVE_CAVIUM"
+        fi
+        AC_MSG_RESULT([yes])
+        enable_shared=no
+        enable_static=yes
+        ENABLED_CAVIUM=yes
+    ],
+    [ ENABLED_CAVIUM=no ]
+)
+
+# cavium V
+trycaviumdir=""
+AC_ARG_WITH([cavium-v],
+    [  --with-cavium-v=PATH    PATH to Cavium V/software dir ],
+    [
+        AC_MSG_CHECKING([for cavium])
+        AM_CFLAGS="$AM_CFLAGS -DHAVE_CAVIUM -DHAVE_CAVIUM_V"
+        LIB_ADD="-lrt -lcrypto $LIB_ADD"
+
+        if test "x$withval" == "xyes" ; then
+            AC_MSG_ERROR([need a PATH for --with-cavium])
+        fi
+        if test "x$withval" != "xno" ; then
+            trycaviumdir=$withval
+        fi
+
+        AC_CHECK_FILES([$trycaviumdir/lib/libnitrox.a], [AM_CPPFLAGS="-I$trycaviumdir/include $AM_CPPFLAGS"], [ENABLED_CAVIUM_V=no])
+        LIB_STATIC_ADD="$trycaviumdir/lib/libnitrox.a $LIB_STATIC_ADD"
+
+        if test "$ENABLED_CAVIUM_V" = "no"; then
+            AC_MSG_ERROR([Could not find Nitrox library])
+        fi
+
+        enable_shared=no
+        enable_static=yes
+        enable_opensslextra=yes
+
+        ENABLED_CAVIUM=yes
+        ENABLED_CAVIUM_V=yes
+    ],
+    [
+        ENABLED_CAVIUM_=no
+        ENABLED_CAVIUM_V=no
+    ]
+)
+
+AM_CONDITIONAL([BUILD_CAVIUM], [test "x$ENABLED_CAVIUM" = "xyes"])
+AM_CONDITIONAL([BUILD_CAVIUM_V], [test "x$ENABLED_CAVIUM_V" = "xyes"])
+
+
+# Intel QuickAssist
+QAT_DIR=""
+BUILD_INTEL_QAT_VERSION=2
+AC_ARG_WITH([intelqa],
+    [  --with-intelqa=PATH     PATH to Intel QuickAssist (QAT) driver dir ],
+    [
+        AC_MSG_CHECKING([for intelqa])
+        CPPFLAGS="$CPPFLAGS -DHAVE_INTEL_QA -DDO_CRYPTO -DUSER_SPACE"
+        OLD_LIBS="$LIBS"
+
+        if test "x$withval" == "xyes" ; then
+            AC_MSG_ERROR([need a PATH for --with-intelqa])
+        fi
+        if test "x$withval" != "xno" ; then
+            QAT_DIR=$withval
+        fi
+
+        CPPFLAGS="$CPPFLAGS -I$QAT_DIR/quickassist/include -I$QAT_DIR/quickassist/include/lac -I$QAT_DIR/quickassist/utilities/osal/include \
+            -I$QAT_DIR/quickassist/utilities/osal/src/linux/user_space/include -I$QAT_DIR/quickassist/lookaside/access_layer/include \
+            -I$QAT_DIR/quickassist/lookaside/access_layer/src/common/include -I$srcdir/wolfssl -I$srcdir/wolfssl/wolfcrypt/port/intel \
+            -I$QAT_DIR/quickassist/utilities/libusdm_drv"
+
+        LDFLAGS="$LDFLAGS -L$QAT_DIR/build -Wl,-Map=output.map"
+        LIBS="$LIBS -lqat_s"
+
+        AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include "cpa_cy_common.h"]], [[ Cpa16U count = 0; cpaCyGetNumInstances(&count); ]])],
+            [ intelqa_linked=yes ],[ intelqa_linked=no ])
+        if test "x$intelqa_linked" == "xno" ; then
+            # Try old QAT driver libraries
+            LIBS="$OLD_LIBS -licp_qa_al_s"
+
+            AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include "cpa_cy_common.h"]], [[ Cpa16U count = 0; cpaCyGetNumInstances(&count); ]])],
+                [ intelqa_linked=yes ],[ intelqa_linked=no ])
+            if test "x$intelqa_linked" == "xno" ; then
+                AC_MSG_ERROR([Intel QuickAssist not found.
+                If it's already installed, specify its path using --with-intelqa=/dir/])
+            else
+                BUILD_INTEL_QAT_VERSION=1
+            fi
+        else
+            AM_CFLAGS="$AM_CFLAGS -DHAVE_INTEL_QA -DDO_CRYPTO -DUSER_SPACE"
+        fi
+        AC_MSG_RESULT([yes])
+
+        if test "x$BUILD_INTEL_QAT_VERSION" == "x1" ; then
+            LIB_ADD="-ladf_proxy -losal -lrt $LIB_ADD"
+        else
+            LIB_ADD="-lusdm_drv_s -losal -lrt $LIB_ADD"
+        fi
+
+        ENABLED_INTEL_QA=yes
+    ],
+    [
+        ENABLED_INTEL_QA=no
+    ]
+)
+AM_CONDITIONAL([BUILD_INTEL_QA], [test "x$ENABLED_INTEL_QA" = "xyes"])
 
 # Fast RSA using Intel IPP
 ippdir="${srcdir}/IPP"
@@ -3960,7 +4227,7 @@ AC_ARG_ENABLE([asynccrypt],
 
 if test "$ENABLED_ASYNCCRYPT" = "yes"
 then
-    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_ASYNC_CRYPT -DHAVE_WOLF_EVENT -DHAVE_WOLF_BIGINT"
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_ASYNC_CRYPT -DHAVE_WOLF_EVENT -DHAVE_WOLF_BIGINT -DWOLFSSL_NO_HASH_RAW"
 
     # if no async hardware then use simulator for testing
     if test "x$ENABLED_CAVIUM" = "xno" && test "x$ENABLED_INTEL_QA" = "xno"
@@ -4005,18 +4272,24 @@ else
 fi
 
 
-# Support for crypto device hardware
-AC_ARG_ENABLE([cryptodev],
-    [AS_HELP_STRING([--enable-cryptodev],[Enable crypto hardware support (default: disabled)])],
-    [ ENABLED_CRYPTODEV=$enableval ],
-    [ ENABLED_CRYPTODEV=no ]
+# Support for crypto callbacks
+AC_ARG_ENABLE([cryptocb],
+    [AS_HELP_STRING([--enable-cryptocb],[Enable crypto callbacks (default: disabled)])],
+    [ ENABLED_CRYPTOCB=$enableval ],
+    [ ENABLED_CRYPTOCB=no ]
     )
+# cryptodev is old name, replaced with cryptocb
+AC_ARG_ENABLE([cryptodev],,[ ENABLED_CRYPTOCB=$enableval ],[ ENABLED_CRYPTOCB=no ])
 
-if test "$ENABLED_CRYPTODEV" = "yes"
+if test "x$ENABLED_PKCS11" = "xyes"
 then
-    AM_CFLAGS="$AM_CFLAGS -DWOLF_CRYPTO_DEV"
+    ENABLED_CRYPTOCB=yes
 fi
-AM_CONDITIONAL([BUILD_CRYPTODEV], [test "x$ENABLED_CRYPTODEV" = "xyes"])
+if test "$ENABLED_CRYPTOCB" = "yes"
+then
+    AM_CFLAGS="$AM_CFLAGS -DWOLF_CRYPTO_CB"
+fi
+AM_CONDITIONAL([BUILD_CRYPTOCB], [test "x$ENABLED_CRYPTOCB" = "xyes"])
 
 
 # Session Export
@@ -4273,6 +4546,10 @@ AS_IF([test "x$ENABLED_MCAST" = "xyes"],
 # WOLFSSL_AFALG does not support SHA224 yet
 AS_IF([(test "x$ENABLED_AFALG" = "xyes") && (test "x$ENABLED_SHA224" = "xyes")],
       [AC_MSG_ERROR([--enable-sha224 with --enable-afalg not yet supported])])
+
+# WOLFSSL_DEVCRYPTO does not support SHA224 yet
+AS_IF([(test "x$ENABLED_DEVCRYPTO" = "xyes") && (test "x$ENABLED_SHA224" = "xyes")],
+      [AC_MSG_ERROR([--enable-sha224 with --enable-devcrypto not yet supported])])
 
 # SCTP and Multicast require DTLS
 AS_IF([(test "x$ENABLED_DTLS" = "xno") && \
@@ -4622,6 +4899,7 @@ echo "   * User Crypto:                $ENABLED_USER_CRYPTO"
 echo "   * Fast RSA:                   $ENABLED_FAST_RSA"
 echo "   * Single Precision:           $ENABLED_SP"
 echo "   * Async Crypto:               $ENABLED_ASYNCCRYPT"
+echo "   * PKCS#11:                    $ENABLED_PKCS11"
 echo "   * Cavium:                     $ENABLED_CAVIUM"
 echo "   * ARM ASM:                    $ENABLED_ARMASM"
 echo "   * AES Key Wrap:               $ENABLED_AESKEYWRAP"
@@ -4630,6 +4908,7 @@ echo "   * Intel Quick Assist:         $ENABLED_INTEL_QA"
 echo "   * Xilinx Hardware Acc.:       $ENABLED_XILINX"
 echo "   * Inline Code:                $ENABLED_INLINE"
 echo "   * Linux AF_ALG:               $ENABLED_AFALG"
+echo "   * Linux cryptodev:            $ENABLED_DEVCRYPTO"
 echo ""
 echo "---"
 

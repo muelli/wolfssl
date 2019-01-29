@@ -68,8 +68,8 @@
     #include <wolfssl/wolfcrypt/port/caam/wolfcaam.h>
 #endif
 
-#ifdef WOLF_CRYPTO_DEV
-    #include <wolfssl/wolfcrypt/cryptodev.h>
+#ifdef WOLF_CRYPTO_CB
+    #include <wolfssl/wolfcrypt/cryptocb.h>
 #endif
 
 #ifdef _MSC_VER
@@ -101,8 +101,8 @@ int wolfCrypt_Init(void)
         }
     #endif
 
-    #ifdef WOLF_CRYPTO_DEV
-        wc_CryptoDev_Init();
+    #ifdef WOLF_CRYPTO_CB
+        wc_CryptoCb_Init();
     #endif
 
     #ifdef WOLFSSL_ASYNC_CRYPT
@@ -153,7 +153,11 @@ int wolfCrypt_Init(void)
     #endif
 
     #if defined(WOLFSSL_ATMEL) || defined(WOLFSSL_ATECC508A)
-        atmel_init();
+        ret = atmel_init();
+        if (ret != 0) {
+            WOLFSSL_MSG("CryptoAuthLib init failed");
+            return ret;
+        }
     #endif
 
     #if defined(WOLFSSL_STSAFEA100)
@@ -247,10 +251,10 @@ int wolfCrypt_Cleanup(void)
 	!defined(WOLFSSL_NUCLEUS) && !defined(WOLFSSL_NUCLEUS_1_2)
 
 /* File Handling Helpers */
-/* returns 0 if file found, -1 if no files or negative error */
+/* returns 0 if file found, WC_READDIR_NOFILE if no files or negative error */
 int wc_ReadDirFirst(ReadDirCtx* ctx, const char* path, char** name)
 {
-    int ret = -1; /* default to no files found */
+    int ret = WC_READDIR_NOFILE; /* default to no files found */
     int pathLen = 0;
     int dnameLen = 0;
 
@@ -304,15 +308,17 @@ int wc_ReadDirFirst(ReadDirCtx* ctx, const char* path, char** name)
     while ((ctx->entry = readdir(ctx->dir)) != NULL) {
         dnameLen = (int)XSTRLEN(ctx->entry->d_name);
 
-        if (pathLen + dnameLen + 2 > MAX_FILENAME_SZ) {
+        if (pathLen + dnameLen + 2 >= MAX_FILENAME_SZ) {
             ret = BAD_PATH_ERROR;
             break;
         }
         XSTRNCPY(ctx->name, path, pathLen + 1);
         ctx->name[pathLen] = '/';
-        XSTRNCPY(ctx->name + pathLen + 1,
-                 ctx->entry->d_name, MAX_FILENAME_SZ - pathLen - 1);
 
+        /* Use dnameLen + 1 for GCC 8 warnings of truncating d_name. Because
+         * of earlier check it is known that dnameLen is less than
+         * MAX_FILENAME_SZ - (pathLen + 2)  so dnameLen +1 will fit */
+        XSTRNCPY(ctx->name + pathLen + 1, ctx->entry->d_name, dnameLen + 1);
         if (stat(ctx->name, &ctx->s) != 0) {
             WOLFSSL_MSG("stat on name failed");
             ret = BAD_PATH_ERROR;
@@ -329,10 +335,10 @@ int wc_ReadDirFirst(ReadDirCtx* ctx, const char* path, char** name)
     return ret;
 }
 
-/* returns 0 if file found, -1 if no more files */
+/* returns 0 if file found, WC_READDIR_NOFILE if no more files */
 int wc_ReadDirNext(ReadDirCtx* ctx, const char* path, char** name)
 {
-    int ret = -1; /* default to no file found */
+    int ret = WC_READDIR_NOFILE; /* default to no file found */
     int pathLen = 0;
     int dnameLen = 0;
 
@@ -368,14 +374,16 @@ int wc_ReadDirNext(ReadDirCtx* ctx, const char* path, char** name)
     while ((ctx->entry = readdir(ctx->dir)) != NULL) {
         dnameLen = (int)XSTRLEN(ctx->entry->d_name);
 
-        if (pathLen + dnameLen + 2 > MAX_FILENAME_SZ) {
+        if (pathLen + dnameLen + 2 >= MAX_FILENAME_SZ) {
             ret = BAD_PATH_ERROR;
             break;
         }
         XSTRNCPY(ctx->name, path, pathLen + 1);
         ctx->name[pathLen] = '/';
-        XSTRNCPY(ctx->name + pathLen + 1,
-                 ctx->entry->d_name, MAX_FILENAME_SZ - pathLen - 1);
+        /* Use dnameLen + 1 for GCC 8 warnings of truncating d_name. Because
+         * of earlier check it is known that dnameLen is less than
+         * MAX_FILENAME_SZ - (pathLen + 2) so that dnameLen +1 will fit */
+        XSTRNCPY(ctx->name + pathLen + 1, ctx->entry->d_name, dnameLen + 1);
 
         if (stat(ctx->name, &ctx->s) != 0) {
             WOLFSSL_MSG("stat on name failed");
@@ -747,6 +755,47 @@ int wolfSSL_CryptHwMutexUnLock(void) {
             return 0;
         else
             return BAD_MUTEX_E;
+    }
+
+#elif defined(WOLFSSL_VXWORKS)
+
+    int wc_InitMutex(wolfSSL_Mutex* m)
+    {
+        if (m) {
+            if ((*m = semMCreate(0)) != SEM_ID_NULL)
+                return 0;
+        }
+        return BAD_MUTEX_E;
+    }
+
+
+    int wc_FreeMutex(wolfSSL_Mutex* m)
+    {
+        if (m) {
+            if (semDelete(*m) == OK)
+                return 0;
+        }
+        return BAD_MUTEX_E;
+    }
+
+
+    int wc_LockMutex(wolfSSL_Mutex* m)
+    {
+        if (m) {
+            if (semTake(*m, WAIT_FOREVER) == OK)
+                return 0;
+        }
+        return BAD_MUTEX_E;
+    }
+
+
+    int wc_UnLockMutex(wolfSSL_Mutex* m)
+    {
+        if (m) {
+            if (semGive(*m) == OK)
+                return 0;
+        }
+        return BAD_MUTEX_E;
     }
 
 #elif defined(THREADX)
@@ -1512,6 +1561,9 @@ time_t micrium_time(time_t* timer)
     CLK_TS_SEC sec;
 
     Clk_GetTS_Unix(&sec);
+
+    if (timer != NULL)
+        *timer = sec;
 
     return (time_t) sec;
 }

@@ -60,6 +60,10 @@ Possible memory options:
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #include <wolfssl/wolfcrypt/logging.h>
 
+#if defined(WOLFSSL_DEBUG_MEMORY) && defined(WOLFSSL_DEBUG_MEMORY_PRINT)
+#include <stdio.h>
+#endif
+
 #ifdef WOLFSSL_FORCE_MALLOC_FAIL_TEST
     static int gMemFailCountSeed;
     static int gMemFailCount;
@@ -127,7 +131,7 @@ void* wolfSSL_Malloc(size_t size)
     }
 
 #ifdef WOLFSSL_DEBUG_MEMORY
-#ifdef WOLFSSL_DEBUG_MEMORY_PRINT
+#if defined(WOLFSSL_DEBUG_MEMORY_PRINT) && !defined(WOLFSSL_TRACK_MEMORY)
     printf("Alloc: %p -> %u at %s:%d\n", res, (word32)size, func, line);
 #else
     (void)func;
@@ -168,7 +172,7 @@ void wolfSSL_Free(void *ptr)
 #endif
 {
 #ifdef WOLFSSL_DEBUG_MEMORY
-#ifdef WOLFSSL_DEBUG_MEMORY_PRINT
+#if defined(WOLFSSL_DEBUG_MEMORY_PRINT) && !defined(WOLFSSL_TRACK_MEMORY)
     printf("Free: %p at %s:%d\n", ptr, func, line);
 #else
     (void)func;
@@ -1008,7 +1012,7 @@ void *xmalloc(size_t n, void* heap, int type, const char* func,
     else
         p32 = malloc(n + sizeof(word32) * 4);
 
-    p32[0] = n;
+    p32[0] = (word32)n;
     p = (void*)(p32 + 4);
 
     fprintf(stderr, "Alloc: %p -> %u (%d) at %s:%s:%d\n", p, (word32)n, type,
@@ -1038,7 +1042,7 @@ void *xrealloc(void *p, size_t n, void* heap, int type, const char* func,
         p32 = realloc(oldp32, n + sizeof(word32) * 4);
 
     if (p32 != NULL) {
-        p32[0] = n;
+        p32[0] = (word32)n;
         newp = (void*)(p32 + 4);
 
         fprintf(stderr, "Alloc: %p -> %u (%d) at %s:%s:%d\n", newp, (word32)n,
@@ -1073,4 +1077,23 @@ void xfree(void *p, void* heap, int type, const char* func, const char* file,
     (void)heap;
 }
 #endif /* WOLFSSL_MEMORY_LOG */
+
+#ifdef WOLFSSL_STACK_LOG
+/* Note: this code only works with GCC using -finstrument-functions. */
+void __attribute__((no_instrument_function))
+     __cyg_profile_func_enter(void *func,  void *caller)
+{
+    register void* sp asm("sp");
+    fprintf(stderr, "ENTER: %016lx %p\n", (size_t)func, sp);
+    (void)caller;
+}
+
+void __attribute__((no_instrument_function))
+     __cyg_profile_func_exit(void *func, void *caller)
+{
+    register void* sp asm("sp");
+    fprintf(stderr, "EXIT: %016lx %p\n", (size_t)func, sp);
+    (void)caller;
+}
+#endif
 

@@ -187,7 +187,7 @@
     /* GCC 7 has new switch() fall-through detection */
     #if defined(__GNUC__)
         #if ((__GNUC__ > 7) || ((__GNUC__ == 7) && (__GNUC_MINOR__ >= 1)))
-            #define FALL_THROUGH __attribute__ ((fallthrough));
+            #define FALL_THROUGH __attribute__ ((fallthrough))
         #endif
     #endif
     #ifndef FALL_THROUGH
@@ -282,10 +282,10 @@
     /* declare/free variable handling for async */
     #ifdef WOLFSSL_ASYNC_CRYPT
         #define DECLARE_VAR(VAR_NAME, VAR_TYPE, VAR_SIZE, HEAP) \
-            VAR_TYPE* VAR_NAME = (VAR_TYPE*)XMALLOC(sizeof(VAR_TYPE) * VAR_SIZE, HEAP, DYNAMIC_TYPE_WOLF_BIGINT);
+            VAR_TYPE* VAR_NAME = (VAR_TYPE*)XMALLOC(sizeof(VAR_TYPE) * VAR_SIZE, (HEAP), DYNAMIC_TYPE_WOLF_BIGINT);
         #define DECLARE_VAR_INIT(VAR_NAME, VAR_TYPE, VAR_SIZE, INIT_VALUE, HEAP) \
             VAR_TYPE* VAR_NAME = ({ \
-                VAR_TYPE* ptr = (VAR_TYPE*)XMALLOC(sizeof(VAR_TYPE) * VAR_SIZE, HEAP, DYNAMIC_TYPE_WOLF_BIGINT); \
+                VAR_TYPE* ptr = (VAR_TYPE*)XMALLOC(sizeof(VAR_TYPE) * VAR_SIZE, (HEAP), DYNAMIC_TYPE_WOLF_BIGINT); \
                 if (ptr && INIT_VALUE) { \
                     XMEMCPY(ptr, INIT_VALUE, sizeof(VAR_TYPE) * VAR_SIZE); \
                 } \
@@ -295,14 +295,17 @@
             VAR_TYPE* VAR_NAME[VAR_ITEMS]; \
             int idx##VAR_NAME; \
             for (idx##VAR_NAME=0; idx##VAR_NAME<VAR_ITEMS; idx##VAR_NAME++) { \
-                VAR_NAME[idx##VAR_NAME] = (VAR_TYPE*)XMALLOC(VAR_SIZE, HEAP, DYNAMIC_TYPE_WOLF_BIGINT); \
+                VAR_NAME[idx##VAR_NAME] = (VAR_TYPE*)XMALLOC(VAR_SIZE, (HEAP), DYNAMIC_TYPE_WOLF_BIGINT); \
             }
         #define FREE_VAR(VAR_NAME, HEAP) \
-            XFREE(VAR_NAME, HEAP, DYNAMIC_TYPE_WOLF_BIGINT);
+            XFREE(VAR_NAME, (HEAP), DYNAMIC_TYPE_WOLF_BIGINT);
         #define FREE_ARRAY(VAR_NAME, VAR_ITEMS, HEAP) \
             for (idx##VAR_NAME=0; idx##VAR_NAME<VAR_ITEMS; idx##VAR_NAME++) { \
-                XFREE(VAR_NAME[idx##VAR_NAME], HEAP, DYNAMIC_TYPE_WOLF_BIGINT); \
+                XFREE(VAR_NAME[idx##VAR_NAME], (HEAP), DYNAMIC_TYPE_WOLF_BIGINT); \
             }
+
+        #define DECLARE_ARRAY_DYNAMIC DECLARE_ARRAY
+        #define FREE_ARRAY_DYNAMIC FREE_ARRAY
     #else
         #define DECLARE_VAR(VAR_NAME, VAR_TYPE, VAR_SIZE, HEAP) \
             VAR_TYPE VAR_NAME[VAR_SIZE]
@@ -312,10 +315,22 @@
             VAR_TYPE VAR_NAME[VAR_ITEMS][VAR_SIZE]
         #define FREE_VAR(VAR_NAME, HEAP) /* nothing to free, its stack */
         #define FREE_ARRAY(VAR_NAME, VAR_ITEMS, HEAP)  /* nothing to free, its stack */
+
+        #define DECLARE_ARRAY_DYNAMIC(VAR_NAME, VAR_TYPE, VAR_ITEMS, VAR_SIZE, HEAP) \
+            VAR_TYPE* VAR_NAME[VAR_ITEMS]; \
+            int idx##VAR_NAME; \
+            for (idx##VAR_NAME=0; idx##VAR_NAME<VAR_ITEMS; idx##VAR_NAME++) { \
+                VAR_NAME[idx##VAR_NAME] = (VAR_TYPE*)XMALLOC(VAR_SIZE, (HEAP), DYNAMIC_TYPE_TMP_BUFFER); \
+            }
+        #define FREE_ARRAY_DYNAMIC(VAR_NAME, VAR_ITEMS, HEAP) \
+            for (idx##VAR_NAME=0; idx##VAR_NAME<VAR_ITEMS; idx##VAR_NAME++) { \
+                XFREE(VAR_NAME[idx##VAR_NAME], (HEAP), DYNAMIC_TYPE_TMP_BUFFER); \
+            }
     #endif
 
     #if !defined(USE_WOLF_STRTOK) && \
-            (defined(__MINGW32__) || defined(WOLFSSL_TIRTOS) || defined(WOLF_C99))
+            ((defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)) || \
+             defined(WOLFSSL_TIRTOS) || defined(WOLF_C99))
         #define USE_WOLF_STRTOK
     #endif
     #if !defined(USE_WOLF_STRSEP) && (defined(WOLF_C99))
@@ -344,6 +359,7 @@
             #define XSTRSEP(s1,d) strsep((s1),(d))
         #endif
 
+        #ifndef XSTRNCASECMP
         #if defined(MICROCHIP_PIC32) || defined(WOLFSSL_TIRTOS)
             /* XC32 does not support strncasecmp, so use case sensitive one */
             #define XSTRNCASECMP(s1,s2,n) strncmp((s1),(s2),(n))
@@ -356,12 +372,13 @@
             #endif
             #define XSTRNCASECMP(s1,s2,n) strncasecmp((s1),(s2),(n))
         #endif
+        #endif /* !XSTRNCASECMP */
 
         /* snprintf is used in asn.c for GetTimeString, PKCS7 test, and when
            debugging is turned on */
         #ifndef USE_WINDOWS_API
-            #if defined(NO_FILESYSTEM) && defined(OPENSSL_EXTRA) && \
-               !defined(NO_STDIO_FILESYSTEM)
+            #if defined(NO_FILESYSTEM) && (defined(OPENSSL_EXTRA) || \
+                   defined(HAVE_PKCS7)) && !defined(NO_STDIO_FILESYSTEM)
                 /* case where stdio is not included else where but is needed for
                  * snprintf */
                 #include <stdio.h>
@@ -495,7 +512,7 @@
         DYNAMIC_TYPE_DIRCTX       = 81,
         DYNAMIC_TYPE_HASHCTX      = 82,
         DYNAMIC_TYPE_SEED         = 83,
-        DYNAMIC_TYPE_SYMETRIC_KEY = 84,
+        DYNAMIC_TYPE_SYMMETRIC_KEY= 84,
         DYNAMIC_TYPE_ECC_BUFFER   = 85,
         DYNAMIC_TYPE_QSH          = 86,
         DYNAMIC_TYPE_SALT         = 87,
@@ -521,12 +538,34 @@
         WC_ALGO_TYPE_HASH = 1,
         WC_ALGO_TYPE_CIPHER = 2,
         WC_ALGO_TYPE_PK = 3,
+        WC_ALGO_TYPE_RNG = 4,
 
-        WC_ALGO_TYPE_MAX = WC_ALGO_TYPE_PK
+        WC_ALGO_TYPE_MAX = WC_ALGO_TYPE_RNG
     };
 
     /* hash types */
     enum wc_HashType {
+    #if defined(HAVE_SELFTEST) || defined(HAVE_FIPS)
+        /* In selftest build, WC_* types are not mapped to WC_HASH_TYPE types.
+         * Values here are based on old selftest hmac.h enum, with additions */
+        WC_HASH_TYPE_NONE = 15,
+        WC_HASH_TYPE_MD2 = 16,
+        WC_HASH_TYPE_MD4 = 17,
+        WC_HASH_TYPE_MD5 = 0,
+        WC_HASH_TYPE_SHA = 1, /* SHA-1 (not old SHA-0) */
+        WC_HASH_TYPE_SHA224 = 8,
+        WC_HASH_TYPE_SHA256 = 2,
+        WC_HASH_TYPE_SHA384 = 5,
+        WC_HASH_TYPE_SHA512 = 4,
+        WC_HASH_TYPE_MD5_SHA = 18,
+        WC_HASH_TYPE_SHA3_224 = 10,
+        WC_HASH_TYPE_SHA3_256 = 11,
+        WC_HASH_TYPE_SHA3_384 = 12,
+        WC_HASH_TYPE_SHA3_512 = 13,
+        WC_HASH_TYPE_BLAKE2B = 14,
+
+        WC_HASH_TYPE_MAX = WC_HASH_TYPE_MD5_SHA
+    #else
         WC_HASH_TYPE_NONE = 0,
         WC_HASH_TYPE_MD2 = 1,
         WC_HASH_TYPE_MD4 = 2,
@@ -544,6 +583,7 @@
         WC_HASH_TYPE_BLAKE2B = 14,
 
         WC_HASH_TYPE_MAX = WC_HASH_TYPE_BLAKE2B
+    #endif /* HAVE_SELFTEST */
     };
 
     /* cipher types */
@@ -574,8 +614,10 @@
         WC_PK_TYPE_ECDSA_VERIFY = 5,
         WC_PK_TYPE_ED25519 = 6,
         WC_PK_TYPE_CURVE25519 = 7,
+        WC_PK_TYPE_RSA_KEYGEN = 8,
+        WC_PK_TYPE_EC_KEYGEN = 9,
 
-        WC_PK_TYPE_MAX = WC_PK_TYPE_CURVE25519
+        WC_PK_TYPE_MAX = WC_PK_TYPE_EC_KEYGEN
     };
 
 
@@ -614,8 +656,10 @@
     #define INVALID_DEVID    -2
 
 
-    /* AESNI requires alignment and ARMASM gains some performance from it */
-    #if defined(WOLFSSL_AESNI) || defined(WOLFSSL_ARMASM) || defined(USE_INTEL_SPEEDUP)
+    /* AESNI requires alignment and ARMASM gains some performance from it
+     * Xilinx RSA operations require alignment */
+    #if defined(WOLFSSL_AESNI) || defined(WOLFSSL_ARMASM) || \
+        defined(USE_INTEL_SPEEDUP) || defined(WOLFSSL_AFALG_XILINX)
         #if !defined(ALIGN16)
             #if defined(__GNUC__)
                 #define ALIGN16 __attribute__ ( (aligned (16)))
@@ -638,19 +682,19 @@
             #else
                 #define ALIGN32
             #endif
-        #endif
+        #endif /* !ALIGN32 */
 
-        #if !defined(ALIGN32)
+        #if !defined(ALIGN64)
             #if defined(__GNUC__)
-                #define ALIGN32 __attribute__ ( (aligned (32)))
+                #define ALIGN64 __attribute__ ( (aligned (64)))
             #elif defined(_MSC_VER)
                 /* disable align warning, we want alignment ! */
                 #pragma warning(disable: 4324)
-                #define ALIGN32 __declspec (align (32))
+                #define ALIGN64 __declspec (align (64))
             #else
-                #define ALIGN32
+                #define ALIGN64
             #endif
-        #endif /* !ALIGN32 */
+        #endif /* !ALIGN64 */
 
         #if defined(__GNUC__)
             #define ALIGN128 __attribute__ ( (aligned (128)))
@@ -678,6 +722,9 @@
         #endif
         #ifndef ALIGN32
             #define ALIGN32
+        #endif
+        #ifndef ALIGN64
+            #define ALIGN64
         #endif
         #ifndef ALIGN128
             #define ALIGN128
@@ -728,7 +775,7 @@
 
     #if defined(WOLFSSL_KEY_GEN) || defined(HAVE_COMP_KEY) || \
         defined(WOLFSSL_DEBUG_MATH) || defined(DEBUG_WOLFSSL) || \
-        defined(WOLFSSL_PUBLIC_MP) || \
+        defined(WOLFSSL_PUBLIC_MP) || defined(OPENSSL_EXTRA) || \
             (defined(HAVE_ECC) && defined(HAVE_ECC_KEY_EXPORT))
         #undef  WC_MP_TO_RADIX
         #define WC_MP_TO_RADIX

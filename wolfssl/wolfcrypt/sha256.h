@@ -24,7 +24,6 @@
 */
 
 
-/* code submitted by raphael.huck@efixo.com */
 
 #ifndef WOLF_CRYPT_SHA256_H
 #define WOLF_CRYPT_SHA256_H
@@ -79,6 +78,12 @@
 #endif
 #ifdef WOLFSSL_ASYNC_CRYPT
     #include <wolfssl/wolfcrypt/async.h>
+#endif
+#if defined(WOLFSSL_DEVCRYPTO) && defined(WOLFSSL_DEVCRYPTO_HASH)
+    #include <wolfssl/wolfcrypt/port/devcrypto/wc_devcrypto.h>
+#endif
+#if defined(WOLFSSL_ESP32WROOM32_CRYPT)
+    #include "wolfssl/wolfcrypt/port/Espressif/esp32-crypt.h"
 #endif
 
 #if defined(_MSC_VER)
@@ -141,6 +146,20 @@ typedef struct wc_Sha256 {
 #endif /* WOLFSSL_ASYNC_CRYPT */
 #ifdef WOLFSSL_SMALL_STACK_CACHE
     word32* W;
+#endif
+#ifdef WOLFSSL_DEVCRYPTO_HASH
+    WC_CRYPTODEV ctx;
+    byte*  msg;
+    word32 used;
+    word32 len;
+#endif
+#if defined(WOLFSSL_ESP32WROOM32_CRYPT) && \
+   !defined(NO_WOLFSSL_ESP32WROOM32_CRYPT_HASH)
+    WC_ESP32SHA ctx;
+#endif
+#ifdef WOLF_CRYPTO_CB
+    int    devId;
+    void*  devCtx; /* generic crypto callback context */
 #endif
 #endif
 } wc_Sha256;

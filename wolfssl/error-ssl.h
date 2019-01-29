@@ -66,9 +66,6 @@ enum wolfSSL_ErrorCodes {
     CLIENT_ID_ERROR              = -331,   /* psk client identity error  */
     SERVER_HINT_ERROR            = -332,   /* psk server hint error  */
     PSK_KEY_ERROR                = -333,   /* psk key error  */
-    ZLIB_INIT_ERROR              = -334,   /* zlib init error  */
-    ZLIB_COMPRESS_ERROR          = -335,   /* zlib compression error  */
-    ZLIB_DECOMPRESS_ERROR        = -336,   /* zlib decompression error  */
 
     GETTIME_ERROR                = -337,   /* gettimeofday failed ??? */
     GETITIMER_ERROR              = -338,   /* getitimer failed ??? */
@@ -165,6 +162,8 @@ enum wolfSSL_ErrorCodes {
     ALERT_COUNT_E                = -427,   /* Alert Count exceeded err */
     EXT_MISSING                  = -428,   /* Required extension not found */
     UNSUPPORTED_EXTENSION        = -429,   /* TLSX not requested by client */
+    PRF_MISSING                  = -430,   /* PRF not compiled in */
+    DTLS_RETX_OVER_TX            = -431,   /* Retransmit DTLS flight over */
     /* add strings to wolfSSL_ERR_reason_error_string in internal.c !!!!! */
 
     /* begin negotiation parameter errors */
