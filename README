@@ -1,3 +1,15 @@
+*** TCPFO Patches ***
+
+This is slightly modified version of wolfSSL.
+It build and runs as the normal wolfSSL library does.
+So the official documentation for building and running the library 
+(INSTALL) still applies.
+
+The difference is, though, that the server appends a TCP Fastopen cookie
+to the TLS Session Ticket. The client can then extract that cookie and pass it
+on to Linux. You need to have the Linux extension, obviously, to make 
+use of that functionality.
+
 *** Description ***
 
 The wolfSSL embedded SSL library (formerly CyaSSL) is a lightweight SSL/TLS
